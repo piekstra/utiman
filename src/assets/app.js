@@ -8,6 +8,7 @@ const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" 
 const state = {
   providers: [],
   summaries: new Map(), // id -> summary response
+  auth: new Map(),      // id -> "authenticated" | "unauthenticated" | "unknown"
 };
 
 async function api(path, opts) {
@@ -58,6 +59,15 @@ function renderCards() {
       continue;
     }
 
+    const authState = state.auth.get(p.id);
+    if (authState === "authenticated") {
+      card.append(statusLine("good", "●", "Signed in"));
+    } else if (authState === "unauthenticated") {
+      const line = statusLine("warn", "○", "Sign-in needed ");
+      if (p.auth?.["login-command"]) line.append(loginTerminalButton(p));
+      card.append(line);
+    }
+
     const s = state.summaries.get(p.id);
     if (!s) {
       card.append(el("div", { class: "skeleton" }));
@@ -84,8 +94,12 @@ function renderCards() {
         hint.append(
           el("span", { class: "icon", "aria-hidden": "true" }, "▲"),
           "Try in your terminal: ",
-          el("code", {}, s.hint)
+          el("code", {}, s.hint),
+          " "
         );
+        if (p.auth?.["login-command"] === s.hint) {
+          hint.append(loginTerminalButton(p, "Open in Terminal"));
+        }
         card.append(hint);
       }
       if (s.stderr) {
@@ -135,18 +149,47 @@ function pretty(text) {
 
 async function loadSummaries() {
   const installed = state.providers.filter((p) => p.summary && p.detection.installed);
+  const authed = state.providers.filter(
+    (p) => p.auth?.required && p.detection.installed
+  );
   state.summaries.clear();
+  state.auth.clear();
   renderCards();
-  await Promise.all(
-    installed.map(async (p) => {
+  await Promise.all([
+    ...installed.map(async (p) => {
       try {
         state.summaries.set(p.id, await api(`/api/providers/${p.id}/summary`));
       } catch (e) {
         state.summaries.set(p.id, { state: "error", stderr: String(e) });
       }
       renderCards();
-    })
-  );
+    }),
+    ...authed.map(async (p) => {
+      try {
+        const r = await api(`/api/providers/${p.id}/auth-status`);
+        state.auth.set(p.id, r.state);
+      } catch {
+        state.auth.set(p.id, "unknown");
+      }
+      renderCards();
+    }),
+  ]);
+}
+
+function loginTerminalButton(p, label = "Open login in Terminal") {
+  return el("button", {
+    class: "small",
+    onclick: async (ev) => {
+      const btn = ev.currentTarget;
+      btn.disabled = true;
+      try {
+        await api(`/api/providers/${p.id}/login-terminal`, { method: "POST" });
+        btn.textContent = "Opened — refresh when done";
+      } catch (e) {
+        btn.textContent = String(e.message || e);
+      }
+    },
+  }, label);
 }
 
 // ---------- operations ----------
@@ -216,13 +259,14 @@ function renderCatalog() {
     }
     entry.append(row);
 
-    if (p.auth?.required && p.auth.login_command) {
+    if (p.auth?.required && p.auth["login-command"]) {
       const login = el("div", { class: "entry-meta" });
-      login.append("login (in your terminal): ", el("code", {}, p.auth.login_command));
+      login.append("login (in your terminal): ", el("code", {}, p.auth["login-command"]), " ");
+      if (p.detection.installed) login.append(loginTerminalButton(p, "Open in Terminal"));
       entry.append(login);
-    } else if (p.setup_command) {
+    } else if (p["setup-command"]) {
       const setup = el("div", { class: "entry-meta" });
-      setup.append("setup (in your terminal): ", el("code", {}, p.setup_command));
+      setup.append("setup (in your terminal): ", el("code", {}, p["setup-command"]));
       entry.append(setup);
     }
     box.append(entry);

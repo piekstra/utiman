@@ -19,6 +19,7 @@ update-check-args = ["self-update", "--check"]
 required = true
 login-command = "tojfl auth login --save"
 status-args = ["auth", "status", "--json"]
+authenticated-field = "authenticated"
 
 # `tojfl account show --json` serializes the account summary; money values are
 # objects like {"cents": 8421}, hence the `.cents` path and cents scale.

@@ -37,7 +37,8 @@ update-check-args = ["self-update", "--check"]  # optional: report-only check
 [auth]
 required = true
 login-command = "acmew auth login"   # run in YOUR terminal; utiman never prompts
-status-args = ["auth", "status"]     # non-secret status report
+status-args = ["auth", "status", "--json"]   # non-secret status report (JSON)
+authenticated-field = "authenticated"        # truthy dot-path = signed in
 
 [summary]                            # fills the dashboard card
 args = ["balance", "--json"]
@@ -83,9 +84,18 @@ and no stdin.
 
 ### `[auth]`
 
-Auth stays inside the CLI (typically the OS keychain). `login-command` is only
-displayed to the user when a summary fails; `status-args` should print a
-non-secret status.
+Auth stays inside the CLI (typically the OS keychain); utiman never collects
+credentials. Three levels of integration, all optional:
+
+- `login-command`: shown as a hint when a summary fails, and (on macOS)
+  behind an **Open login in Terminal** button — utiman opens Terminal with
+  the command so the interactive login still happens entirely between you
+  and the CLI.
+- `status-args` + `authenticated-field`: `status-args` must print non-secret
+  JSON; `authenticated-field` is a dot-path into it whose truthy value means
+  signed in (status commands conventionally exit 0 either way, so the answer
+  has to come from the output). With both set, cards show a
+  "Signed in" / "Sign-in needed" chip.
 
 ### `[summary]`
 

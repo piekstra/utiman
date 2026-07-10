@@ -84,6 +84,14 @@ utiman register acme.toml     # add a provider manifest
 - Nothing is persisted server-side: account data lives only in the API
   responses your own browser requests.
 
+## Troubleshooting
+
+**A provider card hangs or shows "unknown" auth status on macOS** — the first
+time utiman runs a freshly (re)installed CLI that reads the OS keychain,
+macOS shows a one-time "allow keychain access" prompt for that binary. Click
+**Always Allow** and refresh. (Each `cargo install` update produces a new
+binary, so the prompt can reappear after updates.)
+
 ## Development
 
 ```sh

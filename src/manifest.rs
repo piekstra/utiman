@@ -89,9 +89,14 @@ pub struct Auth {
     /// collects or stores credentials itself.
     #[serde(default)]
     pub login_command: Option<String>,
-    /// Non-secret args that report auth state (e.g. ["auth", "status"]).
+    /// Non-secret args that report auth state as JSON
+    /// (e.g. ["auth", "status", "--json"]).
     #[serde(default)]
     pub status_args: Option<Vec<String>>,
+    /// Dot-path into the status JSON whose truthy value means "signed in"
+    /// (e.g. "authenticated", "password_in_keychain").
+    #[serde(default)]
+    pub authenticated_field: Option<String>,
 }
 
 /// How to run the CLI and pull dashboard fields out of what it prints.

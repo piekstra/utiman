@@ -38,6 +38,8 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/providers/{id}/op/{opid}", post(run_operation))
         .route("/api/providers/{id}/install", post(start_install))
         .route("/api/providers/{id}/update-check", post(update_check))
+        .route("/api/providers/{id}/auth-status", get(auth_status))
+        .route("/api/providers/{id}/login-terminal", post(login_terminal))
         .route("/api/providers/{id}", delete(delete_provider))
         .route("/api/install/{task}", get(install_status))
         .route("/api/register", post(register_provider))
@@ -234,6 +236,83 @@ async fn install_status(State(app): State<Arc<App>>, Path(task): Path<u64>) -> R
     Json(json!({ "state": state, "log": log })).into_response()
 }
 
+/// Report whether the provider's CLI is signed in, using the manifest's
+/// status args + `authenticated-field` dot-path. The CLIs exit 0 either way
+/// (status is a report, not a gate), so the answer comes from the JSON.
+async fn auth_status(Path(id): Path<String>) -> Response {
+    let Some(p) = find_provider(&id) else {
+        return err(StatusCode::NOT_FOUND, format!("no provider {id}"));
+    };
+    let auth = p.manifest.auth.as_ref();
+    let (Some(args), Some(field)) = (
+        auth.and_then(|a| a.status_args.clone()),
+        auth.and_then(|a| a.authenticated_field.clone()),
+    ) else {
+        return Json(json!({ "state": "unknown" })).into_response();
+    };
+    let Some(bin) = find_binary(&p.manifest.binary) else {
+        return Json(json!({ "state": "unknown" })).into_response();
+    };
+    let out = run_cli(&bin, &args, Duration::from_secs(15)).await;
+    if !out.ok() {
+        return Json(json!({ "state": "unknown", "stderr": tail(&out.stderr, 500) }))
+            .into_response();
+    }
+    let state = serde_json::from_str::<Value>(&out.stdout)
+        .ok()
+        .and_then(|v| crate::extract::json_path(&v, &field).map(truthy))
+        .map(|authed| if authed { "authenticated" } else { "unauthenticated" })
+        .unwrap_or("unknown");
+    Json(json!({ "state": state })).into_response()
+}
+
+fn truthy(v: &Value) -> bool {
+    match v {
+        Value::Bool(b) => *b,
+        Value::String(s) => !s.is_empty(),
+        Value::Number(n) => n.as_f64().is_some_and(|f| f != 0.0),
+        Value::Null => false,
+        _ => true,
+    }
+}
+
+/// Open the user's terminal with the provider's interactive login command.
+/// The credentials still flow only between the user's terminal and the CLI —
+/// utiman just launches the window.
+async fn login_terminal(Path(id): Path<String>) -> Response {
+    let Some(p) = find_provider(&id) else {
+        return err(StatusCode::NOT_FOUND, format!("no provider {id}"));
+    };
+    let Some(cmd) = p.manifest.auth.as_ref().and_then(|a| a.login_command.clone()) else {
+        return err(StatusCode::BAD_REQUEST, format!("{id} has no login command"));
+    };
+    if std::env::consts::OS != "macos" {
+        return err(
+            StatusCode::NOT_IMPLEMENTED,
+            format!("opening a terminal isn't wired up on this platform yet — run `{cmd}` yourself"),
+        );
+    }
+    let script = format!(
+        "tell application \"Terminal\"\nactivate\ndo script \"{}\"\nend tell",
+        applescript_escape(&cmd)
+    );
+    let out = run_cli(
+        std::path::Path::new("/usr/bin/osascript"),
+        &["-e".to_string(), script],
+        Duration::from_secs(10),
+    )
+    .await;
+    if out.ok() {
+        Json(json!({ "opened": true, "command": cmd })).into_response()
+    } else {
+        err(StatusCode::INTERNAL_SERVER_ERROR, tail(&out.stderr, 500))
+    }
+}
+
+fn applescript_escape(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
 #[derive(Deserialize)]
 struct RegisterBody {
     toml: String,
@@ -292,7 +371,8 @@ fn tail(s: &str, max: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::tail;
+    use super::{applescript_escape, tail, truthy};
+    use serde_json::json;
 
     #[test]
     fn tail_respects_char_boundaries() {
@@ -300,5 +380,23 @@ mod tests {
         let t = tail(s, 4);
         assert!(t.starts_with('…'));
         assert!(t.len() <= 8);
+    }
+
+    #[test]
+    fn truthy_covers_status_shapes() {
+        assert!(truthy(&json!(true)));
+        assert!(!truthy(&json!(false)));
+        assert!(!truthy(&json!(null)));
+        assert!(truthy(&json!("user@example.com")));
+        assert!(!truthy(&json!("")));
+        assert!(!truthy(&json!(0)));
+    }
+
+    #[test]
+    fn applescript_escaping() {
+        assert_eq!(
+            applescript_escape(r#"echo "a\b""#),
+            r#"echo \"a\\b\""#
+        );
     }
 }

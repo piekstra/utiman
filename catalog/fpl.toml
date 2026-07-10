@@ -16,6 +16,7 @@ git = "https://github.com/piekstra/fpl"
 required = true
 login-command = "fpl init"
 status-args = ["auth", "status", "--json"]
+authenticated-field = "password_in_keychain"
 
 # `fpl` renders resource reads as `Key: value` text blocks (JSON is reserved
 # for control-plane commands), so the summary is parsed in text mode.
