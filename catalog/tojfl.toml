@@ -30,6 +30,25 @@ balance-fields = ["balance.cents"]
 due-date-fields = ["due_date"]
 scale = "cents"
 
+# `tojfl usage list --json` / `bills list --json` emit bare arrays of records.
+[[series]]
+id = "usage"
+name = "Water usage by period"
+args = ["usage", "list", "--json"]
+label-field = "period"
+value-fields = ["quantity"]
+chart = "bar"
+
+[[series]]
+id = "bills"
+name = "Bill amounts"
+args = ["bills", "list", "--json"]
+label-field = "date"
+value-fields = ["amount.cents"]
+unit = "usd"
+scale = "cents"
+chart = "bar"
+
 [[operations]]
 id = "bills"
 name = "Billing history"

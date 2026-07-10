@@ -47,6 +47,12 @@ pub struct Manifest {
     pub summary: Option<Query>,
     #[serde(default)]
     pub operations: Vec<Operation>,
+    /// Time-series data (usage, bill amounts, payments) rendered as charts.
+    #[serde(default)]
+    pub series: Vec<Series>,
+    /// Files the CLI can produce (bill PDFs etc.), offered as downloads.
+    #[serde(default)]
+    pub documents: Vec<Document>,
 }
 
 fn default_kind() -> String {
@@ -132,6 +138,55 @@ pub struct Operation {
     pub args: Vec<String>,
 }
 
+/// A time series the CLI can report: one labelled number per record.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct Series {
+    pub id: String,
+    pub name: String,
+    pub args: Vec<String>,
+    /// "json" (default): stdout is JSON. "table": stdout contains a
+    /// pipe-delimited text table with an ALL-CAPS-ish header row.
+    #[serde(default = "default_format")]
+    pub format: String,
+    /// Dot-path to the array of records; empty string = the JSON root.
+    /// Ignored for format = "table".
+    #[serde(default)]
+    pub items_path: String,
+    /// Field holding each record's label (a period or date string).
+    pub label_field: String,
+    /// Candidate fields for the value, tried in order.
+    pub value_fields: Vec<String>,
+    /// Display unit: "usd" formats as money; anything else is shown as-is
+    /// (e.g. "kWh", "gallons").
+    #[serde(default)]
+    pub unit: Option<String>,
+    /// "cents" divides values by 100.
+    #[serde(default)]
+    pub scale: Option<String>,
+    /// "bar" (default) or "line".
+    #[serde(default = "default_chart")]
+    pub chart: String,
+}
+
+fn default_chart() -> String {
+    "bar".into()
+}
+
+/// A file-producing command: utiman appends `out-flag <temp path>`, runs it,
+/// and streams the file back as a browser download.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct Document {
+    pub id: String,
+    pub name: String,
+    pub args: Vec<String>,
+    /// Flag that names the output file, e.g. "--out".
+    pub out_flag: String,
+    /// Suggested download filename (extension sets the content type).
+    pub filename: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Source {
@@ -179,6 +234,22 @@ fn validate(m: &Manifest) -> Result<()> {
     if let Some(q) = &m.summary {
         if !matches!(q.format.as_str(), "json" | "text") {
             bail!("summary.format must be \"json\" or \"text\" (got {:?})", q.format);
+        }
+    }
+    for s in &m.series {
+        if !matches!(s.format.as_str(), "json" | "table") {
+            bail!("series {}: format must be \"json\" or \"table\"", s.id);
+        }
+        if !matches!(s.chart.as_str(), "bar" | "line") {
+            bail!("series {}: chart must be \"bar\" or \"line\"", s.id);
+        }
+        if s.value_fields.is_empty() {
+            bail!("series {}: value-fields must not be empty", s.id);
+        }
+    }
+    for d in &m.documents {
+        if d.filename.contains(['/', '\\']) || d.filename.starts_with('.') {
+            bail!("document {}: filename must be a plain name", d.id);
         }
     }
     if let Some(i) = &m.install {

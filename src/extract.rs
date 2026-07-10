@@ -83,6 +83,87 @@ fn first_text_field(stdout: &str, labels: &[String]) -> Option<String> {
     None
 }
 
+/// One extracted series point.
+#[derive(Debug, PartialEq, serde::Serialize)]
+pub struct Point {
+    pub label: String,
+    pub value: f64,
+}
+
+/// Extract labelled points from a series command's output.
+pub fn extract_series(series: &crate::manifest::Series, stdout: &str) -> Vec<Point> {
+    let records: Vec<serde_json::Map<String, Value>> = match series.format.as_str() {
+        "table" => parse_pipe_table(stdout),
+        _ => {
+            let Ok(root) = serde_json::from_str::<Value>(stdout) else {
+                return Vec::new();
+            };
+            let items = if series.items_path.is_empty() {
+                Some(&root)
+            } else {
+                json_path(&root, &series.items_path)
+            };
+            match items {
+                Some(Value::Array(arr)) => arr
+                    .iter()
+                    .filter_map(|v| v.as_object().cloned())
+                    .collect(),
+                _ => Vec::new(),
+            }
+        }
+    };
+
+    let scale = if series.scale.as_deref() == Some("cents") { 100.0 } else { 1.0 };
+    records
+        .iter()
+        .filter_map(|rec| {
+            let obj = Value::Object(rec.clone());
+            let label = record_field(&obj, &series.label_field)?;
+            let value = series
+                .value_fields
+                .iter()
+                .find_map(|f| record_field(&obj, f).as_deref().and_then(parse_money))?;
+            Some(Point { label, value: value / scale })
+        })
+        .collect()
+}
+
+/// Look a field up inside one record: exact dot-path first, then a
+/// case-insensitive top-level match (so table headers like "AMOUNT" or
+/// "Due date" find manifest fields written naturally).
+fn record_field(rec: &Value, field: &str) -> Option<String> {
+    if let Some(v) = json_path(rec, field) {
+        if !v.is_null() {
+            return Some(json_scalar(v));
+        }
+    }
+    let obj = rec.as_object()?;
+    obj.iter()
+        .find(|(k, v)| k.eq_ignore_ascii_case(field) && !v.is_null())
+        .map(|(_, v)| json_scalar(v))
+}
+
+/// Parse the pipe-delimited text tables the provider CLIs render:
+/// a `HEADER | HEADER` line followed by `value | value` rows. Lines before
+/// the header (titles, key/value preamble) are skipped.
+pub fn parse_pipe_table(stdout: &str) -> Vec<serde_json::Map<String, Value>> {
+    let mut lines = stdout.lines().filter(|l| l.contains('|'));
+    let Some(header_line) = lines.next() else {
+        return Vec::new();
+    };
+    let headers: Vec<String> = header_line.split('|').map(|h| h.trim().to_string()).collect();
+    lines
+        .map(|line| {
+            let cells = line.split('|').map(str::trim);
+            headers
+                .iter()
+                .zip(cells)
+                .map(|(h, c)| (h.clone(), Value::String(c.to_string())))
+                .collect()
+        })
+        .collect()
+}
+
 /// Parse "$1,234.56", "84.21", "-12", "($5.00)" into a float.
 pub fn parse_money(s: &str) -> Option<f64> {
     let t = s.trim();
@@ -153,6 +234,66 @@ mod tests {
         let q = query("json", &["data.amount", "data.balance"], &[], None);
         let s = extract_summary(&q, r#"{"data":{"balance":"$50.00"}}"#);
         assert_eq!(s.balance, Some(50.0));
+    }
+
+    fn series(
+        format: &str,
+        items_path: &str,
+        label: &str,
+        values: &[&str],
+        scale: Option<&str>,
+    ) -> crate::manifest::Series {
+        crate::manifest::Series {
+            id: "s".into(),
+            name: "S".into(),
+            args: vec![],
+            format: format.into(),
+            items_path: items_path.into(),
+            label_field: label.into(),
+            value_fields: values.iter().map(|s| s.to_string()).collect(),
+            unit: None,
+            scale: scale.map(String::from),
+            chart: "bar".into(),
+        }
+    }
+
+    #[test]
+    fn tojfl_bills_series() {
+        let s = series("json", "", "date", &["amount.cents"], Some("cents"));
+        let out = r#"[{"date":"06/01/2026","amount":{"cents":8421},"due_date":"06/18/2026"},
+                      {"date":"05/01/2026","amount":{"cents":7900}}]"#;
+        let pts = extract_series(&s, out);
+        assert_eq!(pts.len(), 2);
+        assert_eq!(pts[0].label, "06/01/2026");
+        assert_eq!(pts[0].value, 84.21);
+    }
+
+    #[test]
+    fn lrfl_payments_series() {
+        let s = series("json", "payments", "payment_date", &["amount"], None);
+        let out = r#"{"account":"1234567-0","payments":[
+            {"transaction_id":"T1","amount":61.75,"payment_date":"05/28/2026"}]}"#;
+        let pts = extract_series(&s, out);
+        assert_eq!(pts, vec![Point { label: "05/28/2026".into(), value: 61.75 }]);
+    }
+
+    #[test]
+    fn pipe_table_series_with_case_insensitive_headers() {
+        let s = series("table", "", "Month", &["Amount"], None);
+        let out = "Bill history\n\nMONTH | AMOUNT | KWH\nJun 2026 | $142.10 | 1120\nMay 2026 | $128.33 | 1044\n";
+        let pts = extract_series(&s, out);
+        assert_eq!(pts.len(), 2);
+        assert_eq!(pts[1].label, "May 2026");
+        assert_eq!(pts[1].value, 128.33);
+    }
+
+    #[test]
+    fn missing_values_are_skipped() {
+        let s = series("json", "", "date", &["amount.cents"], Some("cents"));
+        let out = r#"[{"date":"06/01/2026"},{"date":"05/01/2026","amount":{"cents":100}}]"#;
+        let pts = extract_series(&s, out);
+        assert_eq!(pts.len(), 1);
+        assert_eq!(pts[0].value, 1.0);
     }
 
     #[test]

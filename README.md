@@ -21,6 +21,14 @@ of portal logins.
 shells out to provider CLIs behind the scenes. Everything stays on your
 machine.
 
+Each provider card drills into a detail view with **charts and history**:
+usage per period, bill amounts, payment history (whatever its CLI reports),
+plus a **balance-over-time chart** utiman records locally at every refresh —
+so there's a trend line even for portals that only show the current balance.
+Providers can also expose **downloadable documents** (bill PDFs) and raw
+commands. Auth state shows as a signed-in chip per card, with one-click
+"open login in Terminal" (credentials never pass through utiman).
+
 ## Why CLIs underneath?
 
 Utility portals rarely have APIs. Purpose-built CLIs already solve the hard

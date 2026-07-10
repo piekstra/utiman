@@ -24,6 +24,16 @@ format = "json"
 balance-fields = ["balance_due"]
 due-date-fields = ["services.0.due_date"]
 
+[[series]]
+id = "payments"
+name = "Payments"
+args = ["history", "--years", "2", "--json"]
+items-path = "payments"
+label-field = "payment_date"
+value-fields = ["amount"]
+unit = "usd"
+chart = "bar"
+
 [[operations]]
 id = "charges"
 name = "Charges & meter readings"

@@ -11,6 +11,7 @@ mod install;
 mod manifest;
 mod runner;
 mod server;
+mod snapshots;
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;

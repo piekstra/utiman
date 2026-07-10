@@ -11,6 +11,8 @@ description = "Florida Power & Light: balance, bills, energy usage, payments, an
 [install]
 kind = "cargo-git"
 git = "https://github.com/piekstra/fpl"
+self-update-args = ["update"]
+update-check-args = ["update", "--check"]
 
 [auth]
 required = true

@@ -9,6 +9,7 @@ const state = {
   providers: [],
   summaries: new Map(), // id -> summary response
   auth: new Map(),      // id -> "authenticated" | "unauthenticated" | "unknown"
+  snapshots: new Map(), // id -> [{ts, balance, due_date}]
 };
 
 async function api(path, opts) {
@@ -112,15 +113,26 @@ function renderCards() {
       }
     }
 
-    if (p.operations.length) {
-      const ops = el("div", { class: "card-ops" });
-      for (const op of p.operations) {
-        ops.append(
-          el("button", { class: "small", onclick: () => runOp(p, op) }, op.name)
-        );
-      }
-      card.append(ops);
+    const snaps = state.snapshots.get(p.id) || [];
+    const spark = typeof renderSparkline === "function" ? renderSparkline(snaps) : null;
+    if (spark) {
+      const wrap = el("div", { class: "card-spark" });
+      wrap.append(spark, el("span", { class: "spark-note" }, `${snaps.length} snapshots`));
+      card.append(wrap);
     }
+
+    card.append(el("div", { class: "card-more" }, "Details, history & charts →"));
+    card.classList.add("clickable");
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
+    const open = () => openDrawer(p);
+    card.addEventListener("click", (ev) => {
+      if (ev.target.closest("button, a, details, code")) return;
+      open();
+    });
+    card.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" && ev.target === card) open();
+    });
     cards.append(card);
   }
   renderHero();
@@ -173,7 +185,110 @@ async function loadSummaries() {
       }
       renderCards();
     }),
+    ...installed.map(async (p) => {
+      try {
+        const r = await api(`/api/providers/${p.id}/snapshots`);
+        state.snapshots.set(p.id, r.snapshots);
+      } catch {
+        state.snapshots.set(p.id, []);
+      }
+      renderCards();
+    }),
   ]);
+}
+
+// ---------- detail drawer ----------
+
+function drawerSection(title) {
+  const s = el("div", { class: "drawer-section" });
+  s.append(el("h3", {}, title));
+  return s;
+}
+
+function openDrawer(p) {
+  location.hash = `p=${p.id}`;
+  $("#drawer-title").textContent = p.name;
+  $("#drawer-kind").textContent = p.kind;
+  const body = $("#drawer-body");
+  body.replaceChildren();
+  $("#drawer").hidden = false;
+  $("#drawer-backdrop").hidden = false;
+
+  // Balance trend from utiman's own snapshots.
+  const trend = drawerSection("Balance history");
+  const snaps = state.snapshots.get(p.id) || [];
+  if (snaps.length >= 2) {
+    trend.append(renderChart({
+      name: "Balance over time (recorded locally at each refresh)",
+      unit: "usd",
+      chart: "line",
+      order: "chronological",
+      points: snaps.map((s) => ({
+        label: new Date(s.ts * 1000).toLocaleDateString(),
+        value: s.balance,
+      })),
+    }));
+  } else {
+    trend.append(el("p", { class: "sub" },
+      "Not enough history yet — utiman records a snapshot on every successful refresh."));
+  }
+  body.append(trend);
+
+  // Provider-reported series.
+  for (const s of p.series || []) {
+    const sec = drawerSection(s.name);
+    const holder = el("div", { class: "chart-box" }, "Loading…");
+    sec.append(holder);
+    body.append(sec);
+    api(`/api/providers/${p.id}/series/${s.id}`)
+      .then((r) => {
+        if (!r.ok) {
+          holder.textContent = "";
+          holder.append(
+            el("span", { class: "card-status crit" }, "✕ Couldn't fetch "),
+            el("details", {}, el("summary", {}, "Details"),
+              (() => { const pre = el("pre"); pre.textContent = r.stderr || "(no stderr)"; return pre; })())
+          );
+          return;
+        }
+        holder.replaceWith(renderChart({
+          name: s.name, unit: r.unit, chart: r.chart, points: r.points,
+        }));
+      })
+      .catch((e) => { holder.textContent = String(e); });
+  }
+
+  // Downloadable documents.
+  if ((p.documents || []).length) {
+    const docs = drawerSection("Documents");
+    for (const d of p.documents) {
+      docs.append(el("a", {
+        class: "doc-link",
+        href: `/api/providers/${p.id}/doc/${d.id}`,
+        download: d.filename,
+      }, `⤓ ${d.name}`));
+    }
+    body.append(docs);
+  }
+
+  // Operations (raw command output).
+  if (p.operations.length) {
+    const ops = drawerSection("Commands");
+    const row = el("div", { class: "card-ops" });
+    for (const op of p.operations) {
+      row.append(el("button", { class: "small", onclick: () => runOp(p, op) }, op.name));
+    }
+    ops.append(row);
+    body.append(ops);
+  }
+}
+
+function closeDrawer() {
+  $("#drawer").hidden = true;
+  $("#drawer-backdrop").hidden = true;
+  if (location.hash.startsWith("#p=")) {
+    history.replaceState(null, "", location.pathname);
+  }
 }
 
 function loginTerminalButton(p, label = "Open login in Terminal") {
@@ -358,7 +473,19 @@ async function refresh() {
 $("#refresh").addEventListener("click", refresh);
 $("#register-btn").addEventListener("click", register);
 $("#modal-close").addEventListener("click", () => $("#output-modal").close());
-
-refresh().catch((e) => {
-  $("#cards").textContent = `Failed to load: ${e}`;
+$("#drawer-close").addEventListener("click", closeDrawer);
+$("#drawer-backdrop").addEventListener("click", closeDrawer);
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && !$("#drawer").hidden) closeDrawer();
 });
+
+refresh()
+  .then(() => {
+    // Deep link: #p=<provider-id> opens that provider's drawer.
+    const m = location.hash.match(/^#p=([a-z0-9-]+)$/);
+    const p = m && state.providers.find((x) => x.id === m[1]);
+    if (p) openDrawer(p);
+  })
+  .catch((e) => {
+    $("#cards").textContent = `Failed to load: ${e}`;
+  });

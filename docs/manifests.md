@@ -47,7 +47,26 @@ balance-fields = ["balance_due"]     # fallbacks, tried in order
 due-date-fields = ["due_date"]
 # scale = "cents"                    # divide the balance by 100
 
-[[operations]]                       # extra buttons on the card
+[[series]]                           # charted in the provider's detail drawer
+id = "usage"
+name = "Water usage by period"
+args = ["usage", "list", "--json"]
+format = "json"                      # "json" (default) or "table" (pipe-table text)
+items-path = ""                      # dot-path to the record array ("" = JSON root)
+label-field = "period"               # each record's x label
+value-fields = ["quantity"]          # fallbacks, tried in order
+unit = "gallons"                     # "usd" formats as money; else shown as-is
+# scale = "cents"                    # divide values by 100
+chart = "bar"                        # "bar" (default) or "line"
+
+[[documents]]                        # downloadable files (bill PDFs etc.)
+id = "bill"
+name = "Latest bill (PDF)"
+args = ["bills", "download"]         # utiman appends: <out-flag> <temp path>
+out-flag = "--out"
+filename = "acme-bill.pdf"           # download name; extension sets content type
+
+[[operations]]                       # raw-output buttons in the drawer
 id = "history"
 name = "Payment history"
 args = ["history", "--json"]
@@ -110,6 +129,28 @@ Both field lists are fallback chains, tried in order — useful when the
 upstream payload shape varies. Balances accept numbers or strings
 (`"$1,234.56"`, `(5.00)` for credits); `scale = "cents"` divides by 100.
 Extracted balances are displayed as USD.
+
+### `[[series]]`
+
+Time-series the CLI can report — usage per period, bill amounts, payments.
+Each series becomes a chart (with a table view) in the provider's detail
+drawer. Records come from a JSON array (`items-path` dot-path, root by
+default) or, with `format = "table"`, from a pipe-delimited text table whose
+header row names the fields (matched case-insensitively, so `label-field =
+"Month"` finds a `MONTH` column). Points are assumed newest-first, matching
+how the CLIs print.
+
+Separately from manifest series, utiman records its own **balance snapshot**
+on every successful summary (to `~/.local/share/utiman/history/<id>.jsonl`),
+so every provider gets a balance-over-time chart and a card sparkline even
+when its portal only reports the current balance.
+
+### `[[documents]]`
+
+File-producing commands, offered as downloads in the detail drawer. utiman
+appends `<out-flag> <temp path>` to `args`, runs the command (120s timeout),
+streams the file back with `filename` as the download name, and deletes the
+temp file. The extension picks the content type (pdf/csv/json/txt).
 
 ### `[[operations]]`
 

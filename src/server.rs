@@ -32,6 +32,7 @@ pub fn router(app: Arc<App>) -> Router {
     Router::new()
         .route("/", get(index))
         .route("/app.js", get(app_js))
+        .route("/charts.js", get(charts_js))
         .route("/style.css", get(style_css))
         .route("/api/providers", get(list_providers))
         .route("/api/providers/{id}/summary", get(provider_summary))
@@ -40,6 +41,9 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/providers/{id}/update-check", post(update_check))
         .route("/api/providers/{id}/auth-status", get(auth_status))
         .route("/api/providers/{id}/login-terminal", post(login_terminal))
+        .route("/api/providers/{id}/snapshots", get(snapshots_for))
+        .route("/api/providers/{id}/series/{sid}", get(series_data))
+        .route("/api/providers/{id}/doc/{docid}", get(download_document))
         .route("/api/providers/{id}", delete(delete_provider))
         .route("/api/install/{task}", get(install_status))
         .route("/api/register", post(register_provider))
@@ -78,6 +82,13 @@ async fn app_js() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "application/javascript")],
         include_str!("assets/app.js"),
+    )
+}
+
+async fn charts_js() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "application/javascript")],
+        include_str!("assets/charts.js"),
     )
 }
 
@@ -148,6 +159,9 @@ async fn provider_summary(Path(id): Path<String>) -> Response {
     }
 
     let fields = extract_summary(query, &out.stdout);
+    if let Some(balance) = fields.balance {
+        crate::snapshots::record(&id, balance, fields.due_date.as_deref());
+    }
     Json(json!({
         "state": "ok",
         "balance": fields.balance,
@@ -155,6 +169,96 @@ async fn provider_summary(Path(id): Path<String>) -> Response {
         "raw": out.stdout,
     }))
     .into_response()
+}
+
+async fn snapshots_for(Path(id): Path<String>) -> Response {
+    if find_provider(&id).is_none() {
+        return err(StatusCode::NOT_FOUND, format!("no provider {id}"));
+    }
+    Json(json!({ "snapshots": crate::snapshots::read(&id) })).into_response()
+}
+
+/// Run a manifest series command and return chart-ready points.
+async fn series_data(Path((id, sid)): Path<(String, String)>) -> Response {
+    let Some(p) = find_provider(&id) else {
+        return err(StatusCode::NOT_FOUND, format!("no provider {id}"));
+    };
+    let Some(series) = p.manifest.series.iter().find(|s| s.id == sid) else {
+        return err(StatusCode::NOT_FOUND, format!("{id} has no series {sid}"));
+    };
+    let Some(bin) = find_binary(&p.manifest.binary) else {
+        return err(StatusCode::CONFLICT, format!("{} is not installed", p.manifest.binary));
+    };
+    let out = run_cli(&bin, &series.args, Duration::from_secs(DEFAULT_TIMEOUT_SECS)).await;
+    if !out.ok() {
+        return Json(json!({
+            "ok": false,
+            "stderr": tail(&out.stderr, 2000),
+            "timed_out": out.timed_out,
+        }))
+        .into_response();
+    }
+    let points = crate::extract::extract_series(series, &out.stdout);
+    Json(json!({
+        "ok": true,
+        "points": points,
+        "unit": series.unit,
+        "chart": series.chart,
+        "name": series.name,
+    }))
+    .into_response()
+}
+
+/// Run a document command with a temp output path and stream the file back.
+async fn download_document(Path((id, docid)): Path<(String, String)>) -> Response {
+    let Some(p) = find_provider(&id) else {
+        return err(StatusCode::NOT_FOUND, format!("no provider {id}"));
+    };
+    let Some(doc) = p.manifest.documents.iter().find(|d| d.id == docid) else {
+        return err(StatusCode::NOT_FOUND, format!("{id} has no document {docid}"));
+    };
+    let Some(bin) = find_binary(&p.manifest.binary) else {
+        return err(StatusCode::CONFLICT, format!("{} is not installed", p.manifest.binary));
+    };
+    let tmp = std::env::temp_dir().join(format!(
+        "utiman-{}-{}-{}",
+        p.manifest.id,
+        std::process::id(),
+        doc.filename
+    ));
+    let mut args = doc.args.clone();
+    args.push(doc.out_flag.clone());
+    args.push(tmp.display().to_string());
+    let out = run_cli(&bin, &args, Duration::from_secs(120)).await;
+    let bytes = fs::read(&tmp);
+    let _ = fs::remove_file(&tmp);
+    if !out.ok() {
+        return err(
+            StatusCode::BAD_GATEWAY,
+            format!("document command failed: {}", tail(&out.stderr, 500)),
+        );
+    }
+    let Ok(bytes) = bytes else {
+        return err(StatusCode::BAD_GATEWAY, "command succeeded but produced no file");
+    };
+    let content_type = match doc.filename.rsplit('.').next() {
+        Some("pdf") => "application/pdf",
+        Some("csv") => "text/csv",
+        Some("json") => "application/json",
+        Some("txt") => "text/plain",
+        _ => "application/octet-stream",
+    };
+    (
+        [
+            (header::CONTENT_TYPE, content_type.to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{}\"", doc.filename),
+            ),
+        ],
+        bytes,
+    )
+        .into_response()
 }
 
 async fn run_operation(Path((id, opid)): Path<(String, String)>) -> Response {

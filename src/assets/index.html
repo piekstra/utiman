@@ -54,6 +54,18 @@ due-date-fields = ["due_date"]'></textarea>
   </details>
 </main>
 
+<div id="drawer-backdrop" hidden></div>
+<aside id="drawer" hidden aria-label="Provider detail">
+  <div class="drawer-head">
+    <div>
+      <h2 id="drawer-title" style="margin:0"></h2>
+      <span id="drawer-kind" class="kind"></span>
+    </div>
+    <button id="drawer-close">Close</button>
+  </div>
+  <div id="drawer-body"></div>
+</aside>
+
 <dialog id="output-modal">
   <div class="modal-head">
     <strong id="modal-title"></strong>
@@ -67,6 +79,7 @@ due-date-fields = ["due_date"]'></textarea>
   (OS keychain) and this dashboard only answers requests from this machine.</p>
 </footer>
 
+<script src="/charts.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

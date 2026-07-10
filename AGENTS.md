@@ -18,8 +18,9 @@ shells out to provider binaries described by TOML manifests.
 | `src/runner.rs` | spawn a provider CLI (no shell), capture output, timeout kill |
 | `src/detect.rs` | PATH lookup + `--version` probe |
 | `src/install.rs` | background install/update tasks with streamed logs |
+| `src/snapshots.rs` | local balance history (`~/.local/share/utiman/history/*.jsonl`) |
 | `src/server.rs` | axum routes, Host-header guard, API handlers |
-| `src/assets/` | embedded frontend (index.html / app.js / style.css) |
+| `src/assets/` | embedded frontend (index.html / app.js / charts.js / style.css) |
 | `catalog/` | built-in provider manifests (embedded via `include_str!`) |
 | `docs/manifests.md` | the manifest format reference |
 
