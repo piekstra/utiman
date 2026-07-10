@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>utiman</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+</head>
+<body>
+<header>
+  <div>
+    <h1>utiman</h1>
+    <p class="sub">Your utility accounts, via their CLIs. Everything runs locally.</p>
+  </div>
+  <div class="hero" id="hero" hidden>
+    <div class="hero-label">Total due</div>
+    <div class="hero-value" id="hero-value"></div>
+    <div class="hero-sub" id="hero-sub"></div>
+  </div>
+  <button id="refresh" class="primary">Refresh</button>
+</header>
+
+<main>
+  <section id="cards" class="cards" aria-label="Utility accounts"></section>
+
+  <h2>Catalog</h2>
+  <p class="sub">Provider CLIs utiman knows how to drive. Install and update from here;
+  logins happen in your own terminal, never in this app.</p>
+  <section id="catalog" class="catalog"></section>
+
+  <details id="register-box">
+    <summary>Register a CLI</summary>
+    <p class="sub">Paste a provider manifest (TOML). It is saved to
+    <code>~/.config/utiman/providers/</code> and appears in the catalog immediately.
+    See the <a href="https://github.com/piekstra/utiman/blob/main/docs/manifests.md"
+    target="_blank" rel="noreferrer">manifest reference</a>.</p>
+    <textarea id="register-toml" rows="14" spellcheck="false"
+placeholder='id = "my-provider"
+name = "My Provider"
+kind = "water"
+binary = "myprov"
+repo = "https://github.com/you/my-provider"
+
+[summary]
+args = ["balance", "--json"]
+balance-fields = ["balance_due"]
+due-date-fields = ["due_date"]'></textarea>
+    <div class="row">
+      <label><input type="checkbox" id="register-overwrite"> Overwrite existing</label>
+      <button id="register-btn" class="primary">Register</button>
+      <span id="register-msg" role="status"></span>
+    </div>
+  </details>
+</main>
+
+<dialog id="output-modal">
+  <div class="modal-head">
+    <strong id="modal-title"></strong>
+    <button id="modal-close">Close</button>
+  </div>
+  <pre id="modal-body"></pre>
+</dialog>
+
+<footer>
+  <p class="sub">utiman never sees your passwords — each CLI keeps its own credentials
+  (OS keychain) and this dashboard only answers requests from this machine.</p>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+# Loxahatchee River District — sewer/wastewater.
+# CLI: https://github.com/piekstra/loxahatchee-river-fl (binary `lrfl`)
+
+id = "lrfl"
+name = "Loxahatchee River Sewer"
+kind = "sewer"
+binary = "lrfl"
+repo = "https://github.com/piekstra/loxahatchee-river-fl"
+description = "Loxahatchee River District: balance, charges, service status, and payment history. Guest-view reads; no login needed."
+
+# One-time setup: reads are anonymous guest-view lookups by account number,
+# so there is no login — just save your account once.
+setup-command = "lrfl config set-account <your-account>"
+
+[install]
+kind = "cargo-git"
+git = "https://github.com/piekstra/loxahatchee-river-fl"
+self-update-args = ["self-update"]
+update-check-args = ["self-update", "--check"]
+
+[summary]
+args = ["balance", "--json"]
+format = "json"
+balance-fields = ["balance_due"]
+due-date-fields = ["services.0.due_date"]
+
+[[operations]]
+id = "charges"
+name = "Charges & meter readings"
+args = ["charges", "--json"]
+
+[[operations]]
+id = "history"
+name = "Payment history"
+args = ["history", "--json"]
+
+[[operations]]
+id = "status"
+name = "Service status"
+args = ["status", "--json"]
+
+[[operations]]
+id = "district"
+name = "District info"
+args = ["district", "--json"]

@@ -1,0 +1,41 @@
+# FPL (Florida Power & Light) — electric.
+# CLI: https://github.com/piekstra/fpl (binary `fpl`)
+
+id = "fpl"
+name = "FPL Electric"
+kind = "electric"
+binary = "fpl"
+repo = "https://github.com/piekstra/fpl"
+description = "Florida Power & Light: balance, bills, energy usage, payments, and outages."
+
+[install]
+kind = "cargo-git"
+git = "https://github.com/piekstra/fpl"
+
+[auth]
+required = true
+login-command = "fpl init"
+status-args = ["auth", "status", "--json"]
+
+# `fpl` renders resource reads as `Key: value` text blocks (JSON is reserved
+# for control-plane commands), so the summary is parsed in text mode.
+[summary]
+args = ["accounts", "balance"]
+format = "text"
+balance-fields = ["Balance"]
+due-date-fields = ["Due date"]
+
+[[operations]]
+id = "bills"
+name = "Bill history"
+args = ["bills", "list"]
+
+[[operations]]
+id = "outages"
+name = "Outages (county feed, no login)"
+args = ["outages", "list"]
+
+[[operations]]
+id = "auth-status"
+name = "Auth status"
+args = ["auth", "status"]

@@ -1,0 +1,45 @@
+# Town of Jupiter, FL — water/utility billing.
+# CLI: https://github.com/piekstra/town-of-jupiter-fl (binary `tojfl`)
+
+id = "tojfl"
+name = "Town of Jupiter Water"
+kind = "water"
+binary = "tojfl"
+repo = "https://github.com/piekstra/town-of-jupiter-fl"
+description = "Town of Jupiter utility billing portal: account summary, billing and usage history, transactions."
+
+[install]
+kind = "cargo-git"
+git = "https://github.com/piekstra/town-of-jupiter-fl"
+package = "tojfl-cli"
+self-update-args = ["self-update", "--yes"]
+update-check-args = ["self-update", "--check"]
+
+[auth]
+required = true
+login-command = "tojfl auth login --save"
+status-args = ["auth", "status", "--json"]
+
+# `tojfl account show --json` serializes the account summary; money values are
+# objects like {"cents": 8421}, hence the `.cents` path and cents scale.
+[summary]
+args = ["account", "show", "--json"]
+format = "json"
+balance-fields = ["balance.cents"]
+due-date-fields = ["due_date"]
+scale = "cents"
+
+[[operations]]
+id = "bills"
+name = "Billing history"
+args = ["bills", "list", "--json"]
+
+[[operations]]
+id = "usage"
+name = "Usage comparison"
+args = ["usage", "compare", "--json"]
+
+[[operations]]
+id = "transactions"
+name = "Transactions"
+args = ["transactions", "list", "--json"]

@@ -1,0 +1,47 @@
+# AGENTS.md — utiman
+
+Canonical agent entrypoint for this repo. `CLAUDE.md` is a one-line pointer here.
+
+## What this is
+
+A local-only web dashboard (`utiman`, Rust/axum) over per-provider utility
+CLIs. The server binds 127.0.0.1, serves an embedded vanilla-JS frontend, and
+shells out to provider binaries described by TOML manifests.
+
+## Local map
+
+| Path | Responsibility |
+|------|----------------|
+| `src/main.rs` | clap CLI: `serve` (default), `list`, `register` |
+| `src/manifest.rs` | manifest schema, validation, builtin+user loading/merge |
+| `src/extract.rs` | balance/due-date extraction: JSON dot-paths, text labels, money parsing |
+| `src/runner.rs` | spawn a provider CLI (no shell), capture output, timeout kill |
+| `src/detect.rs` | PATH lookup + `--version` probe |
+| `src/install.rs` | background install/update tasks with streamed logs |
+| `src/server.rs` | axum routes, Host-header guard, API handlers |
+| `src/assets/` | embedded frontend (index.html / app.js / style.css) |
+| `catalog/` | built-in provider manifests (embedded via `include_str!`) |
+| `docs/manifests.md` | the manifest format reference |
+
+## Durable conventions (do not drift)
+
+- **This is a public repo.** Never commit real account numbers, addresses,
+  balances, credentials, or captured portal output. Examples use placeholder
+  values (`1234567-0` style). Test fixtures are synthetic.
+- utiman never handles credentials; logins are delegated to the provider CLIs
+  in the user's own terminal. Don't add password fields to the UI or API.
+- The server must stay loopback-only: keep the 127.0.0.1 bind and the Host
+  header check in `server.rs`.
+- Extensibility is data, not code: new providers are manifests. Don't
+  special-case a provider in Rust; extend the manifest schema instead, with
+  validation and a test.
+- CLI invocations are argv arrays spawned without a shell, with a timeout.
+  Manifest `binary` is a bare name (validation rejects paths).
+- Frontend is dependency-free vanilla JS; CLI output is inserted with
+  `textContent`, never `innerHTML`.
+
+## Verify
+
+`cargo test && cargo clippy --all-targets` must be clean. For behavior
+changes, run `cargo run -- --no-open` and exercise the affected API route
+with curl.
