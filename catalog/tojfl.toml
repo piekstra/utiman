@@ -8,6 +8,9 @@ binary = "tojfl"
 repo = "https://github.com/piekstra/town-of-jupiter-fl-cli"
 description = "Town of Jupiter utility billing portal: account summary, billing and usage history, transactions."
 
+# tojfl conforms to piekstra-cli/1 (family `pk-cli-selfupdate` — installs
+# without prompting — and `auth status --json` → `authenticated`), so
+# self-update and auth-status use the family defaults.
 [install]
 kind = "cargo-git"
 git = "https://github.com/piekstra/town-of-jupiter-fl-cli"
