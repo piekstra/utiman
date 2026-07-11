@@ -1,0 +1,9 @@
+name: frontend
+description: Reviews the embedded dashboard frontend for correctness, output-safety, and the repo's no-dependency constraints.
+model_tier: medium
+effort: medium
+file_globs:
+  - "src/assets/**"
+applies_when:
+  - A change touches the embedded frontend (src/assets/ HTML, JS, or CSS).
+needs_full_file_content: true
