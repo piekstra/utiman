@@ -1,18 +1,18 @@
 # FPL (Florida Power & Light) — electric.
-# CLI: https://github.com/piekstra/fpl (binary `fpl`)
+# CLI: https://github.com/piekstra/fpl-cli (binary `fpl`)
 
 id = "fpl"
 name = "FPL Electric"
 kind = "electric"
 binary = "fpl"
-repo = "https://github.com/piekstra/fpl"
+repo = "https://github.com/piekstra/fpl-cli"
 description = "Florida Power & Light: balance, bills, energy usage, payments, and outages."
 
 # fpl conforms to piekstra-cli/1, so self-update and auth-status use the
 # family defaults (`self-update`, `auth status --json` → `authenticated`).
 [install]
 kind = "cargo-git"
-git = "https://github.com/piekstra/fpl"
+git = "https://github.com/piekstra/fpl-cli"
 
 [auth]
 required = true

@@ -1,16 +1,16 @@
 # Town of Jupiter, FL — water/utility billing.
-# CLI: https://github.com/piekstra/town-of-jupiter-fl (binary `tojfl`)
+# CLI: https://github.com/piekstra/town-of-jupiter-fl-cli (binary `tojfl`)
 
 id = "tojfl"
 name = "Town of Jupiter Water"
 kind = "water"
 binary = "tojfl"
-repo = "https://github.com/piekstra/town-of-jupiter-fl"
+repo = "https://github.com/piekstra/town-of-jupiter-fl-cli"
 description = "Town of Jupiter utility billing portal: account summary, billing and usage history, transactions."
 
 [install]
 kind = "cargo-git"
-git = "https://github.com/piekstra/town-of-jupiter-fl"
+git = "https://github.com/piekstra/town-of-jupiter-fl-cli"
 package = "tojfl-cli"
 
 [auth]
