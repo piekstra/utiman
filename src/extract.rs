@@ -104,16 +104,19 @@ pub fn extract_series(series: &crate::manifest::Series, stdout: &str) -> Vec<Poi
                 json_path(&root, &series.items_path)
             };
             match items {
-                Some(Value::Array(arr)) => arr
-                    .iter()
-                    .filter_map(|v| v.as_object().cloned())
-                    .collect(),
+                Some(Value::Array(arr)) => {
+                    arr.iter().filter_map(|v| v.as_object().cloned()).collect()
+                }
                 _ => Vec::new(),
             }
         }
     };
 
-    let scale = if series.scale.as_deref() == Some("cents") { 100.0 } else { 1.0 };
+    let scale = if series.scale.as_deref() == Some("cents") {
+        100.0
+    } else {
+        1.0
+    };
     records
         .iter()
         .filter_map(|rec| {
@@ -123,7 +126,10 @@ pub fn extract_series(series: &crate::manifest::Series, stdout: &str) -> Vec<Poi
                 .value_fields
                 .iter()
                 .find_map(|f| record_field(&obj, f).as_deref().and_then(parse_money))?;
-            Some(Point { label, value: value / scale })
+            Some(Point {
+                label,
+                value: value / scale,
+            })
         })
         .collect()
 }
@@ -151,7 +157,10 @@ pub fn parse_pipe_table(stdout: &str) -> Vec<serde_json::Map<String, Value>> {
     let Some(header_line) = lines.next() else {
         return Vec::new();
     };
-    let headers: Vec<String> = header_line.split('|').map(|h| h.trim().to_string()).collect();
+    let headers: Vec<String> = header_line
+        .split('|')
+        .map(|h| h.trim().to_string())
+        .collect();
     lines
         .map(|line| {
             let cells = line.split('|').map(str::trim);
@@ -171,7 +180,10 @@ pub fn parse_money(s: &str) -> Option<f64> {
         Some(inner) => (inner, true),
         None => (t, false),
     };
-    let cleaned: String = t.chars().filter(|c| !"$,".contains(*c) && !c.is_whitespace()).collect();
+    let cleaned: String = t
+        .chars()
+        .filter(|c| !"$,".contains(*c) && !c.is_whitespace())
+        .collect();
     let v: f64 = cleaned.parse().ok()?;
     Some(if negative { -v } else { v })
 }
@@ -274,7 +286,13 @@ mod tests {
         let out = r#"{"account":"1234567-0","payments":[
             {"transaction_id":"T1","amount":61.75,"payment_date":"05/28/2026"}]}"#;
         let pts = extract_series(&s, out);
-        assert_eq!(pts, vec![Point { label: "05/28/2026".into(), value: 61.75 }]);
+        assert_eq!(
+            pts,
+            vec![Point {
+                label: "05/28/2026".into(),
+                value: 61.75
+            }]
+        );
     }
 
     #[test]

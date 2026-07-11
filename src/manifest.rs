@@ -229,11 +229,17 @@ fn validate(m: &Manifest) -> Result<()> {
         bail!("id must be non-empty kebab-case (got {:?})", m.id);
     }
     if m.binary.is_empty() || m.binary.contains(['/', '\\']) {
-        bail!("binary must be a bare command name, not a path (got {:?})", m.binary);
+        bail!(
+            "binary must be a bare command name, not a path (got {:?})",
+            m.binary
+        );
     }
     if let Some(q) = &m.summary {
         if !matches!(q.format.as_str(), "json" | "text") {
-            bail!("summary.format must be \"json\" or \"text\" (got {:?})", q.format);
+            bail!(
+                "summary.format must be \"json\" or \"text\" (got {:?})",
+                q.format
+            );
         }
     }
     for s in &m.series {
@@ -254,7 +260,9 @@ fn validate(m: &Manifest) -> Result<()> {
     }
     if let Some(i) = &m.install {
         match i.kind.as_str() {
-            "cargo-git" if i.git.is_none() => bail!("install.kind = cargo-git requires install.git"),
+            "cargo-git" if i.git.is_none() => {
+                bail!("install.kind = cargo-git requires install.git")
+            }
             "cargo" if i.krate.is_none() => bail!("install.kind = cargo requires install.krate"),
             "custom" if i.command.as_ref().is_none_or(|c| c.is_empty()) => {
                 bail!("install.kind = custom requires a non-empty install.command")
