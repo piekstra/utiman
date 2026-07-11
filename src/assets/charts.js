@@ -43,7 +43,8 @@ function renderChart(spec) {
   const head = document.createElement("div");
   head.className = "chart-head";
   const title = document.createElement("strong");
-  title.textContent = spec.name;
+  // Callers inside a titled section pass showTitle: false to avoid repeating it.
+  title.textContent = spec.showTitle === false ? "" : spec.name;
   const toggle = document.createElement("button");
   toggle.className = "small";
   toggle.textContent = "Table";
@@ -156,6 +157,11 @@ function plot(spec, container) {
       M.top + ih - (p.value / max) * ih,
     ]);
     const d = xy.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+    const base = M.top + ih;
+    svg.append(svgEl("path", {
+      d: `${d} L${xy[xy.length - 1][0].toFixed(1)},${base} L${xy[0][0].toFixed(1)},${base} Z`,
+      class: "series-area",
+    }));
     svg.append(svgEl("path", { d, class: "series-line" }));
     xy.forEach(([x, y], i) => {
       const dot = svgEl("circle", { cx: x, cy: y, r: 4, class: "series-dot" });
@@ -202,6 +208,59 @@ function plot(spec, container) {
   });
 
   return svg;
+}
+
+/**
+ * Descriptive stats over series points (newest-first, as the API returns
+ * them). Everything here is directly computed from the data — no guesses.
+ */
+function seriesStats(points) {
+  const latest = points[0];
+  const prev = points[1] || null;
+  const values = points.map((p) => p.value);
+  const avg = values.reduce((a, b) => a + b, 0) / values.length;
+  const peak = points.reduce((m, p) => (p.value > m.value ? p : m), points[0]);
+  const delta = prev ? latest.value - prev.value : null;
+  const deltaPct = prev && prev.value ? (delta / Math.abs(prev.value)) * 100 : null;
+  let streak = 0;
+  let dir = 0;
+  for (let i = 0; i + 1 < points.length; i++) {
+    const d = Math.sign(points[i].value - points[i + 1].value);
+    if (d === 0) break;
+    if (dir === 0) dir = d;
+    if (d !== dir) break;
+    streak++;
+  }
+  return { latest, prev, delta, deltaPct, avg, peak, streak, dir, count: points.length };
+}
+
+/** Stat-chip row for a series: latest (with delta), average, peak, streak. */
+function insightChips(stats, unit) {
+  const row = document.createElement("div");
+  row.className = "insight-chips";
+  const chip = (label, value, subNode) => {
+    const c = document.createElement("div");
+    c.className = "insight-chip";
+    const v = document.createElement("strong");
+    v.textContent = value;
+    c.append(label, v);
+    if (subNode) c.append(subNode);
+    row.append(c);
+  };
+
+  let deltaNode = null;
+  if (stats.deltaPct != null) {
+    deltaNode = document.createElement("span");
+    deltaNode.className = stats.delta >= 0 ? "delta-up" : "delta-down";
+    deltaNode.textContent = `${stats.delta >= 0 ? "▲" : "▼"} ${Math.abs(stats.deltaPct).toFixed(1)}% vs ${stats.prev.label}`;
+  }
+  chip(`Latest (${stats.latest.label})`, fmtVal(stats.latest.value, unit), deltaNode);
+  chip(`Average of ${stats.count}`, fmtVal(stats.avg, unit));
+  chip(`Peak (${stats.peak.label})`, fmtVal(stats.peak.value, unit));
+  if (stats.streak >= 3) {
+    chip("Trend", `${stats.streak} periods ${stats.dir > 0 ? "rising" : "falling"}`);
+  }
+  return row;
 }
 
 /** Small inline balance sparkline for a card: de-emphasized line, accent end dot. */

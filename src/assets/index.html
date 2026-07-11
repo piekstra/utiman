@@ -6,36 +6,99 @@
 <title>utiman</title>
 <link rel="stylesheet" href="/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x26A1;</text></svg>">
+<script>
+  // Apply the saved theme before first paint to avoid a flash.
+  // ?theme=light|dark overrides for the session (demos, screenshots).
+  const t = new URLSearchParams(location.search).get("theme")
+    || localStorage.getItem("utiman-theme");
+  if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+</script>
 </head>
 <body>
-<header>
-  <div>
-    <h1>utiman</h1>
-    <p class="sub">Your utility accounts, via their CLIs. Everything runs locally.</p>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4.6 13.4h6L9.8 22l8.6-12.4h-6L13 2Z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-droplet" viewBox="0 0 24 24"><path d="M12 3C12 3 5.8 9.9 5.8 14.4a6.2 6.2 0 0 0 12.4 0C18.2 9.9 12 3 12 3Z"/></symbol>
+    <symbol id="i-waves" viewBox="0 0 24 24"><path d="M3 8.5c2-2.2 4-2.2 6 0s4 2.2 6 0 4-2.2 6 0"/><path d="M3 13.5c2-2.2 4-2.2 6 0s4 2.2 6 0 4-2.2 6 0"/><path d="M3 18.5c2-2.2 4-2.2 6 0s4 2.2 6 0 4-2.2 6 0"/></symbol>
+    <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 3c1 3-1.5 4.5-1.5 7a4 4 0 0 0 1 2.6C12 10 14 9.6 14.5 7.5 16.7 9.3 18 11.7 18 14a6 6 0 0 1-12 0c0-4 3.8-6.5 6-11Z"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M3 9.5a13 13 0 0 1 18 0"/><path d="M6.2 13a8.5 8.5 0 0 1 11.6 0"/><path d="M9.4 16.4a4 4 0 0 1 5.2 0"/><circle cx="12" cy="19.5" r="1.4" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 6.5h15"/><path d="M9 6.5V4.8A1.3 1.3 0 0 1 10.3 3.5h3.4A1.3 1.3 0 0 1 15 4.8v1.7"/><path d="M6.3 6.5 7 19a1.6 1.6 0 0 0 1.6 1.5h6.8A1.6 1.6 0 0 0 17 19l.7-12.5"/><path d="M10 10.5v6M14 10.5v6"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="M12 3 20 7.2v9.6L12 21l-8-4.2V7.2L12 3Z"/><path d="M4 7.2 12 11.4l8-4.2M12 11.4V21"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M18.5 2.5v4.2h-4.2" /></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3.5v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 17.5v1.8A1.7 1.7 0 0 0 6.2 21h11.6a1.7 1.7 0 0 0 1.7-1.7v-1.8"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="m7 9.5 3 2.7-3 2.7M12.5 15h4.5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.8 4.4 4.4L19 7.5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-github" viewBox="0 0 24 24"><path d="M12 2.5a9.5 9.5 0 0 0-3 18.5c.5.1.65-.2.65-.45v-1.8c-2.65.6-3.2-1.1-3.2-1.1-.45-1.1-1.05-1.4-1.05-1.4-.85-.6.05-.6.05-.6.95.05 1.45 1 1.45 1 .85 1.45 2.2 1.05 2.75.8.1-.6.35-1.05.6-1.3-2.1-.25-4.3-1.05-4.3-4.7 0-1.05.35-1.9 1-2.55-.1-.25-.45-1.2.1-2.55 0 0 .8-.25 2.6 1a9 9 0 0 1 4.75 0c1.8-1.25 2.6-1 2.6-1 .55 1.35.2 2.3.1 2.55.6.65 1 1.5 1 2.55 0 3.65-2.2 4.45-4.3 4.7.35.3.65.85.65 1.75v2.6c0 .25.15.55.65.45A9.5 9.5 0 0 0 12 2.5Z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-theme" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17A8.5 8.5 0 0 0 12 3.5Z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4.5 19a9 9 0 1 1 15 0"/><path d="M12 14.5 16 9"/><circle cx="12" cy="15" r="1.6" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5.5 6.5 6.5L9 18.5"/></symbol>
+  </defs>
+</svg>
+
+<header class="appbar">
+  <div class="appbar-inner">
+    <a class="brand" href="#/dashboard">
+      <span class="brand-mark"><svg class="ic"><use href="#i-gauge"/></svg></span>
+      <span class="brand-name">utiman</span>
+    </a>
+    <nav class="tabs" aria-label="Sections">
+      <a href="#/dashboard" data-tab="dashboard">Dashboard</a>
+      <a href="#/catalog" data-tab="catalog">Catalog</a>
+      <a href="#/add" data-tab="add">Add provider</a>
+    </nav>
+    <div class="appbar-actions">
+      <span id="refreshed-note" class="refreshed-note" hidden></span>
+      <button id="theme-toggle" class="icon-btn" title="Theme">
+        <svg class="ic"><use href="#i-theme"/></svg>
+      </button>
+      <button id="refresh" class="primary">
+        <svg class="ic spin-when-busy"><use href="#i-refresh"/></svg><span>Refresh</span>
+      </button>
+    </div>
   </div>
-  <div class="hero" id="hero" hidden>
-    <div class="hero-label">Total due</div>
-    <div class="hero-value" id="hero-value"></div>
-    <div class="hero-sub" id="hero-sub"></div>
-  </div>
-  <button id="refresh" class="primary">Refresh</button>
 </header>
 
 <main>
-  <section id="cards" class="cards" aria-label="Utility accounts"></section>
+  <section id="view-dashboard" hidden>
+    <div class="stats-strip" id="stats-strip" hidden>
+      <div class="hero">
+        <div class="hero-label">Total due</div>
+        <div class="hero-value" id="hero-value"></div>
+      </div>
+      <div class="stats-side" id="stats-side"></div>
+    </div>
+    <div id="cards" class="cards" aria-label="Utility accounts"></div>
+    <div id="dash-empty" class="empty-state" hidden>
+      <svg class="ic big"><use href="#i-gauge"/></svg>
+      <h2>No providers yet</h2>
+      <p>Install a utility CLI from the catalog and your accounts show up here.</p>
+      <a class="btn primary" href="#/catalog">Browse the catalog</a>
+    </div>
+  </section>
 
-  <h2>Catalog</h2>
-  <p class="sub">Provider CLIs utiman knows how to drive. Install and update from here;
-  logins happen in your own terminal, never in this app.</p>
-  <section id="catalog" class="catalog"></section>
+  <section id="view-catalog" hidden>
+    <div class="section-head">
+      <h1>Catalog</h1>
+      <p>Provider CLIs utiman knows how to drive. Install and update from here —
+      logins happen in your own terminal, never in this app.</p>
+    </div>
+    <div id="catalog" class="catalog-grid"></div>
+  </section>
 
-  <details id="register-box">
-    <summary>Register a CLI</summary>
-    <p class="sub">Paste a provider manifest (TOML). It is saved to
-    <code>~/.config/utiman/providers/</code> and appears in the catalog immediately.
-    See the <a href="https://github.com/piekstra/utiman/blob/main/docs/manifests.md"
-    target="_blank" rel="noreferrer">manifest reference</a>.</p>
-    <textarea id="register-toml" rows="14" spellcheck="false"
+  <section id="view-add" hidden>
+    <div class="section-head">
+      <h1>Add a provider</h1>
+      <p>Any CLI becomes a provider with a TOML manifest — which binary to run and
+      how to read a balance out of its output. Saved to
+      <code>~/.config/utiman/providers/</code>. See the
+      <a href="https://github.com/piekstra/utiman/blob/main/docs/manifests.md"
+         target="_blank" rel="noreferrer">manifest reference</a>.</p>
+    </div>
+    <div class="panel">
+      <textarea id="register-toml" rows="16" spellcheck="false"
 placeholder='id = "my-provider"
 name = "My Provider"
 kind = "water"
@@ -46,22 +109,29 @@ repo = "https://github.com/you/my-provider"
 args = ["balance", "--json"]
 balance-fields = ["balance_due"]
 due-date-fields = ["due_date"]'></textarea>
-    <div class="row">
-      <label><input type="checkbox" id="register-overwrite"> Overwrite existing</label>
-      <button id="register-btn" class="primary">Register</button>
-      <span id="register-msg" role="status"></span>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="register-overwrite"> Overwrite existing</label>
+        <button id="register-btn" class="primary">
+          <svg class="ic"><use href="#i-plus"/></svg><span>Register</span>
+        </button>
+      </div>
     </div>
-  </details>
+  </section>
 </main>
 
 <div id="drawer-backdrop" hidden></div>
-<aside id="drawer" hidden aria-label="Provider detail">
+<aside id="drawer" aria-label="Provider detail">
   <div class="drawer-head">
-    <div>
-      <h2 id="drawer-title" style="margin:0"></h2>
-      <span id="drawer-kind" class="kind"></span>
+    <div class="drawer-title-wrap">
+      <span id="drawer-badge" class="badge"></span>
+      <div>
+        <h2 id="drawer-title"></h2>
+        <span id="drawer-kind" class="pill"></span>
+      </div>
     </div>
-    <button id="drawer-close">Close</button>
+    <button id="drawer-close" class="icon-btn" title="Close">
+      <svg class="ic"><use href="#i-x"/></svg>
+    </button>
   </div>
   <div id="drawer-body"></div>
 </aside>
@@ -69,14 +139,16 @@ due-date-fields = ["due_date"]'></textarea>
 <dialog id="output-modal">
   <div class="modal-head">
     <strong id="modal-title"></strong>
-    <button id="modal-close">Close</button>
+    <button id="modal-close" class="icon-btn" title="Close"><svg class="ic"><use href="#i-x"/></svg></button>
   </div>
   <pre id="modal-body"></pre>
 </dialog>
 
+<div id="toasts" aria-live="polite"></div>
+
 <footer>
-  <p class="sub">utiman never sees your passwords — each CLI keeps its own credentials
-  (OS keychain) and this dashboard only answers requests from this machine.</p>
+  <p>utiman never sees your passwords — each CLI keeps its own credentials in the
+  OS keychain, and this dashboard only answers requests from this machine.</p>
 </footer>
 
 <script src="/charts.js"></script>
