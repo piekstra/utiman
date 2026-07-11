@@ -31,8 +31,10 @@ git = "https://github.com/you/acme-water-cli"
 package = "acmew-cli"                # optional: select a workspace package
 # crate = "acmew-cli"                # for kind = "cargo" (crates.io)
 # command = ["brew", "install", "acmew"]   # for kind = "custom"
-self-update-args = ["self-update", "--yes"]     # optional: CLI updates itself
-update-check-args = ["self-update", "--check"]  # optional: report-only check
+# Optional for conforming CLIs (piekstra-cli/1): these default to
+# ["self-update"] and ["self-update", "--check", "--json"].
+self-update-args = ["self-update", "--yes"]     # CLI updates itself in place
+update-check-args = ["self-update", "--check"]  # report-only check
 
 [auth]
 required = true
@@ -97,11 +99,13 @@ args = ["history", "--json"]
 | `custom` | `command` | the argv as given |
 
 `self-update-args` / `update-check-args` (optional, any kind): when the CLI is
-already installed and supports updating itself, the Update button runs
-`<binary> <self-update-args...>` instead of reinstalling, and the catalog gets
-a **Check for update** button running `<binary> <update-check-args...>`.
-Use a non-interactive form (`--yes`-style flags) — utiman gives the CLI no TTY
-and no stdin.
+already installed, the Update button runs `<binary> <self-update-args...>`
+instead of reinstalling, and the catalog gets a **Check for update** button
+running `<binary> <update-check-args...>`. Like the `[auth]` defaults, these
+follow the conforming-CLI convention (piekstra-cli/1) when omitted:
+`["self-update"]` and `["self-update", "--check", "--json"]`. Set them
+explicitly only when the CLI deviates — e.g. it needs a `--yes`-style flag to
+skip confirmation, since utiman gives the CLI no TTY and no stdin.
 
 ### `[auth]`
 
