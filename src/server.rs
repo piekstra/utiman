@@ -52,7 +52,10 @@ pub fn router(app: Arc<App>) -> Router {
 }
 
 /// Reject requests whose Host is not a loopback name (DNS-rebinding guard).
-async fn require_local_host(req: axum::extract::Request, next: middleware::Next) -> Response {
+async fn require_local_host(
+    req: axum::extract::Request,
+    next: middleware::Next,
+) -> Response {
     let host = req
         .headers()
         .get(header::HOST)
@@ -90,10 +93,7 @@ async fn charts_js() -> impl IntoResponse {
 }
 
 async fn style_css() -> impl IntoResponse {
-    (
-        [(header::CONTENT_TYPE, "text/css")],
-        include_str!("assets/style.css"),
-    )
+    ([(header::CONTENT_TYPE, "text/css")], include_str!("assets/style.css"))
 }
 
 fn find_provider(id: &str) -> Option<Provider> {
@@ -135,10 +135,7 @@ async fn provider_summary(Path(id): Path<String>) -> Response {
     };
     let m = &p.manifest;
     let Some(query) = &m.summary else {
-        return err(
-            StatusCode::BAD_REQUEST,
-            format!("{id} has no summary query"),
-        );
+        return err(StatusCode::BAD_REQUEST, format!("{id} has no summary query"));
     };
     let Some(bin) = find_binary(&m.binary) else {
         return Json(json!({ "state": "not-installed" })).into_response();
@@ -190,17 +187,9 @@ async fn series_data(Path((id, sid)): Path<(String, String)>) -> Response {
         return err(StatusCode::NOT_FOUND, format!("{id} has no series {sid}"));
     };
     let Some(bin) = find_binary(&p.manifest.binary) else {
-        return err(
-            StatusCode::CONFLICT,
-            format!("{} is not installed", p.manifest.binary),
-        );
+        return err(StatusCode::CONFLICT, format!("{} is not installed", p.manifest.binary));
     };
-    let out = run_cli(
-        &bin,
-        &series.args,
-        Duration::from_secs(DEFAULT_TIMEOUT_SECS),
-    )
-    .await;
+    let out = run_cli(&bin, &series.args, Duration::from_secs(DEFAULT_TIMEOUT_SECS)).await;
     if !out.ok() {
         return Json(json!({
             "ok": false,
@@ -226,16 +215,10 @@ async fn download_document(Path((id, docid)): Path<(String, String)>) -> Respons
         return err(StatusCode::NOT_FOUND, format!("no provider {id}"));
     };
     let Some(doc) = p.manifest.documents.iter().find(|d| d.id == docid) else {
-        return err(
-            StatusCode::NOT_FOUND,
-            format!("{id} has no document {docid}"),
-        );
+        return err(StatusCode::NOT_FOUND, format!("{id} has no document {docid}"));
     };
     let Some(bin) = find_binary(&p.manifest.binary) else {
-        return err(
-            StatusCode::CONFLICT,
-            format!("{} is not installed", p.manifest.binary),
-        );
+        return err(StatusCode::CONFLICT, format!("{} is not installed", p.manifest.binary));
     };
     let tmp = std::env::temp_dir().join(format!(
         "utiman-{}-{}-{}",
@@ -256,10 +239,7 @@ async fn download_document(Path((id, docid)): Path<(String, String)>) -> Respons
         );
     }
     let Ok(bytes) = bytes else {
-        return err(
-            StatusCode::BAD_GATEWAY,
-            "command succeeded but produced no file",
-        );
+        return err(StatusCode::BAD_GATEWAY, "command succeeded but produced no file");
     };
     let content_type = match doc.filename.rsplit('.').next() {
         Some("pdf") => "application/pdf",
@@ -286,16 +266,10 @@ async fn run_operation(Path((id, opid)): Path<(String, String)>) -> Response {
         return err(StatusCode::NOT_FOUND, format!("no provider {id}"));
     };
     let Some(op) = p.manifest.operations.iter().find(|o| o.id == opid) else {
-        return err(
-            StatusCode::NOT_FOUND,
-            format!("{id} has no operation {opid}"),
-        );
+        return err(StatusCode::NOT_FOUND, format!("{id} has no operation {opid}"));
     };
     let Some(bin) = find_binary(&p.manifest.binary) else {
-        return err(
-            StatusCode::CONFLICT,
-            format!("{} is not installed", p.manifest.binary),
-        );
+        return err(StatusCode::CONFLICT, format!("{} is not installed", p.manifest.binary));
     };
     let out: RunOutcome = run_cli(&bin, &op.args, Duration::from_secs(DEFAULT_TIMEOUT_SECS)).await;
     Json(json!({
@@ -318,7 +292,12 @@ async fn start_install(State(app): State<Arc<App>>, Path(id): Path<String>) -> R
     let Some(spec) = &p.manifest.install else {
         return err(StatusCode::BAD_REQUEST, format!("{id} has no install spec"));
     };
-    let self_update = find_binary(&p.manifest.binary).zip(spec.self_update_args.clone());
+    // Conforming CLIs default to the standard `self-update` spelling.
+    let self_update_args = spec
+        .self_update_args
+        .clone()
+        .unwrap_or_else(|| vec!["self-update".into()]);
+    let self_update = find_binary(&p.manifest.binary).map(|b| (b, self_update_args));
     let argv = match self_update {
         Some((bin, args)) => {
             let mut v = vec![bin.display().to_string()];
@@ -342,19 +321,14 @@ async fn update_check(Path(id): Path<String>) -> Response {
     let Some(p) = find_provider(&id) else {
         return err(StatusCode::NOT_FOUND, format!("no provider {id}"));
     };
-    let Some(args) = p
-        .manifest
-        .install
-        .as_ref()
-        .and_then(|i| i.update_check_args.clone())
-    else {
+    let Some(install) = p.manifest.install.as_ref() else {
         return err(StatusCode::BAD_REQUEST, format!("{id} has no update check"));
     };
+    let args = install.update_check_args.clone().unwrap_or_else(|| {
+        vec!["self-update".into(), "--check".into(), "--json".into()]
+    });
     let Some(bin) = find_binary(&p.manifest.binary) else {
-        return err(
-            StatusCode::CONFLICT,
-            format!("{} is not installed", p.manifest.binary),
-        );
+        return err(StatusCode::CONFLICT, format!("{} is not installed", p.manifest.binary));
     };
     let out = run_cli(&bin, &args, Duration::from_secs(DEFAULT_TIMEOUT_SECS)).await;
     Json(json!({
@@ -381,13 +355,18 @@ async fn auth_status(Path(id): Path<String>) -> Response {
     let Some(p) = find_provider(&id) else {
         return err(StatusCode::NOT_FOUND, format!("no provider {id}"));
     };
-    let auth = p.manifest.auth.as_ref();
-    let (Some(args), Some(field)) = (
-        auth.and_then(|a| a.status_args.clone()),
-        auth.and_then(|a| a.authenticated_field.clone()),
-    ) else {
+    // Conforming CLIs (piekstra-cli/1) need no per-provider config: default
+    // to `auth status --json` and its canonical `authenticated` field.
+    let Some(auth) = p.manifest.auth.as_ref() else {
         return Json(json!({ "state": "unknown" })).into_response();
     };
+    let args = auth.status_args.clone().unwrap_or_else(|| {
+        vec!["auth".into(), "status".into(), "--json".into()]
+    });
+    let field = auth
+        .authenticated_field
+        .clone()
+        .unwrap_or_else(|| "authenticated".into());
     let Some(bin) = find_binary(&p.manifest.binary) else {
         return Json(json!({ "state": "unknown" })).into_response();
     };
@@ -399,13 +378,7 @@ async fn auth_status(Path(id): Path<String>) -> Response {
     let state = serde_json::from_str::<Value>(&out.stdout)
         .ok()
         .and_then(|v| crate::extract::json_path(&v, &field).map(truthy))
-        .map(|authed| {
-            if authed {
-                "authenticated"
-            } else {
-                "unauthenticated"
-            }
-        })
+        .map(|authed| if authed { "authenticated" } else { "unauthenticated" })
         .unwrap_or("unknown");
     Json(json!({ "state": state })).into_response()
 }
@@ -427,23 +400,13 @@ async fn login_terminal(Path(id): Path<String>) -> Response {
     let Some(p) = find_provider(&id) else {
         return err(StatusCode::NOT_FOUND, format!("no provider {id}"));
     };
-    let Some(cmd) = p
-        .manifest
-        .auth
-        .as_ref()
-        .and_then(|a| a.login_command.clone())
-    else {
-        return err(
-            StatusCode::BAD_REQUEST,
-            format!("{id} has no login command"),
-        );
+    let Some(cmd) = p.manifest.auth.as_ref().and_then(|a| a.login_command.clone()) else {
+        return err(StatusCode::BAD_REQUEST, format!("{id} has no login command"));
     };
     if std::env::consts::OS != "macos" {
         return err(
             StatusCode::NOT_IMPLEMENTED,
-            format!(
-                "opening a terminal isn't wired up on this platform yet — run `{cmd}` yourself"
-            ),
+            format!("opening a terminal isn't wired up on this platform yet — run `{cmd}` yourself"),
         );
     }
     let script = format!(
@@ -484,10 +447,7 @@ async fn register_provider(Json(body): Json<RegisterBody>) -> Response {
     if exists && !body.overwrite {
         return err(
             StatusCode::CONFLICT,
-            format!(
-                "provider {} already exists (set overwrite to replace)",
-                m.id
-            ),
+            format!("provider {} already exists (set overwrite to replace)", m.id),
         );
     }
     let dir = manifest::user_providers_dir();
@@ -508,10 +468,7 @@ async fn delete_provider(Path(id): Path<String>) -> Response {
         return err(StatusCode::NOT_FOUND, format!("no provider {id}"));
     };
     let Some(path) = (p.source == Source::User).then_some(p.path).flatten() else {
-        return err(
-            StatusCode::BAD_REQUEST,
-            format!("{id} is built in and can't be removed"),
-        );
+        return err(StatusCode::BAD_REQUEST, format!("{id} is built in and can't be removed"));
     };
     match fs::remove_file(&path) {
         Ok(()) => Json(json!({ "removed": id })).into_response(),
@@ -524,9 +481,7 @@ fn tail(s: &str, max: usize) -> String {
         s.to_string()
     } else {
         let cut = s.len() - max;
-        let start = (cut..s.len())
-            .find(|i| s.is_char_boundary(*i))
-            .unwrap_or(cut);
+        let start = (cut..s.len()).find(|i| s.is_char_boundary(*i)).unwrap_or(cut);
         format!("…{}", &s[start..])
     }
 }
@@ -556,6 +511,9 @@ mod tests {
 
     #[test]
     fn applescript_escaping() {
-        assert_eq!(applescript_escape(r#"echo "a\b""#), r#"echo \"a\\b\""#);
+        assert_eq!(
+            applescript_escape(r#"echo "a\b""#),
+            r#"echo \"a\\b\""#
+        );
     }
 }

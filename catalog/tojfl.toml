@@ -12,14 +12,10 @@ description = "Town of Jupiter utility billing portal: account summary, billing 
 kind = "cargo-git"
 git = "https://github.com/piekstra/town-of-jupiter-fl"
 package = "tojfl-cli"
-self-update-args = ["self-update", "--yes"]
-update-check-args = ["self-update", "--check"]
 
 [auth]
 required = true
 login-command = "tojfl auth login --save"
-status-args = ["auth", "status", "--json"]
-authenticated-field = "authenticated"
 
 # `tojfl account show --json` serializes the account summary; money values are
 # objects like {"cents": 8421}, hence the `.cents` path and cents scale.

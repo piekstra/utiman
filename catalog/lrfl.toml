@@ -12,11 +12,10 @@ description = "Loxahatchee River District: balance, charges, service status, and
 # so there is no login — just save your account once.
 setup-command = "lrfl config set-account <your-account>"
 
+# lrfl conforms to piekstra-cli/1: family-default self-update spelling.
 [install]
 kind = "cargo-git"
 git = "https://github.com/piekstra/loxahatchee-river-fl"
-self-update-args = ["self-update"]
-update-check-args = ["self-update", "--check"]
 
 [summary]
 args = ["balance", "--json"]

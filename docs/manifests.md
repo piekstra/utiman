@@ -37,6 +37,8 @@ update-check-args = ["self-update", "--check"]  # optional: report-only check
 [auth]
 required = true
 login-command = "acmew auth login"   # run in YOUR terminal; utiman never prompts
+# Optional for conforming CLIs (piekstra-cli/1): these default to
+# ["auth", "status", "--json"] and "authenticated" (auth-status/v1).
 status-args = ["auth", "status", "--json"]   # non-secret status report (JSON)
 authenticated-field = "authenticated"        # truthy dot-path = signed in
 
@@ -110,7 +112,8 @@ credentials. Three levels of integration, all optional:
   behind an **Open login in Terminal** button — utiman opens Terminal with
   the command so the interactive login still happens entirely between you
   and the CLI.
-- `status-args` + `authenticated-field`: `status-args` must print non-secret
+- `status-args` + `authenticated-field` (optional; default to the
+  piekstra-cli/1 conventions above): `status-args` must print non-secret
   JSON; `authenticated-field` is a dot-path into it whose truthy value means
   signed in (status commands conventionally exit 0 either way, so the answer
   has to come from the output). With both set, cards show a
