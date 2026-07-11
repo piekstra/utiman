@@ -142,10 +142,10 @@ async fn run_logged(argv: &[String], task: &InstallTask) -> Result<bool> {
         }
     }
     let status = child.wait().await?;
-    task.log
-        .lock()
-        .unwrap()
-        .push_str(&format!("exit: {}\n", status.code().map_or("signal".into(), |c| c.to_string())));
+    task.log.lock().unwrap().push_str(&format!(
+        "exit: {}\n",
+        status.code().map_or("signal".into(), |c| c.to_string())
+    ));
     Ok(status.success())
 }
 
@@ -166,7 +166,14 @@ mod tests {
         };
         assert_eq!(
             install_argv(&spec).unwrap(),
-            ["cargo", "install", "--force", "--git", "https://example.com/repo", "pkg-cli"]
+            [
+                "cargo",
+                "install",
+                "--force",
+                "--git",
+                "https://example.com/repo",
+                "pkg-cli"
+            ]
         );
     }
 }

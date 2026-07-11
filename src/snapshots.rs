@@ -60,8 +60,8 @@ fn now() -> u64 {
 pub fn record(id: &str, balance: f64, due_date: Option<&str>) {
     let history = read(id);
     if let Some(last) = history.last() {
-        let unchanged = (last.balance - balance).abs() < 0.005
-            && last.due_date.as_deref() == due_date;
+        let unchanged =
+            (last.balance - balance).abs() < 0.005 && last.due_date.as_deref() == due_date;
         if unchanged && now().saturating_sub(last.ts) < UNCHANGED_REFRESH_SECS {
             return;
         }
@@ -78,7 +78,11 @@ pub fn record(id: &str, balance: f64, due_date: Option<&str>) {
     let Ok(line) = serde_json::to_string(&snap) else {
         return;
     };
-    if let Ok(mut f) = OpenOptions::new().append(true).create(true).open(file_for(id)) {
+    if let Ok(mut f) = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(file_for(id))
+    {
         let _ = writeln!(f, "{line}");
     }
 }
@@ -89,7 +93,11 @@ mod tests {
 
     #[test]
     fn snapshot_roundtrip() {
-        let s = Snapshot { ts: 1_700_000_000, balance: 84.21, due_date: Some("07/18/2026".into()) };
+        let s = Snapshot {
+            ts: 1_700_000_000,
+            balance: 84.21,
+            due_date: Some("07/18/2026".into()),
+        };
         let line = serde_json::to_string(&s).unwrap();
         assert_eq!(serde_json::from_str::<Snapshot>(&line).unwrap(), s);
     }

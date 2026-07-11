@@ -92,8 +92,8 @@ async fn list() -> Result<()> {
 }
 
 fn register(file: &PathBuf) -> Result<()> {
-    let text = std::fs::read_to_string(file)
-        .with_context(|| format!("cannot read {}", file.display()))?;
+    let text =
+        std::fs::read_to_string(file).with_context(|| format!("cannot read {}", file.display()))?;
     let m = manifest::parse_manifest(&text)?;
     let dir = manifest::user_providers_dir();
     std::fs::create_dir_all(&dir)?;

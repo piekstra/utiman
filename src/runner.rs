@@ -65,10 +65,7 @@ pub async fn run_cli(bin: &Path, args: &[String], timeout: Duration) -> RunOutco
         Err(_) => RunOutcome {
             status: None,
             stdout: String::new(),
-            stderr: format!(
-                "timed out after {}s (killed)",
-                timeout.as_secs()
-            ),
+            stderr: format!("timed out after {}s (killed)", timeout.as_secs()),
             timed_out: true,
         },
     }
