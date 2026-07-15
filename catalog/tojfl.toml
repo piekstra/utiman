@@ -48,6 +48,15 @@ unit = "usd"
 scale = "cents"
 chart = "bar"
 
+# `tojfl bills get [N] --output PATH` downloads a statement PDF
+# (N is 1-based, 1 = most recent).
+[[documents]]
+id = "latest-statement"
+name = "Latest statement (PDF)"
+args = ["bills", "get", "1"]
+out-flag = "--output"
+filename = "tojfl-statement.pdf"
+
 [[operations]]
 id = "bills"
 name = "Billing history"

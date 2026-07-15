@@ -17,6 +17,7 @@ pub const BUILTIN: &[(&str, &str)] = &[
     ("fpl", include_str!("../catalog/fpl.toml")),
     ("tojfl", include_str!("../catalog/tojfl.toml")),
     ("lrfl", include_str!("../catalog/lrfl.toml")),
+    ("xfin", include_str!("../catalog/xfin.toml")),
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

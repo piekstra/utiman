@@ -1,0 +1,45 @@
+# Xfinity (Comcast) — internet.
+# CLI: https://github.com/piekstra/xfinity-cli (binary `xfin`)
+
+id = "xfin"
+name = "Xfinity Internet"
+kind = "internet"
+binary = "xfin"
+repo = "https://github.com/piekstra/xfinity-cli"
+description = "Xfinity: billing summary, statements, payments, and internet data usage. Authenticates by replaying a browser session (no password login)."
+
+# xfin conforms to piekstra-cli/1, so self-update and auth-status use the
+# family defaults (`self-update`, `auth status --json` → `authenticated`).
+[install]
+kind = "cargo-git"
+git = "https://github.com/piekstra/xfinity-cli"
+
+# Session capture happens in a browser first (Xfinity blocks non-browser
+# logins): sign in at xfinity.com, copy the Cookie header from DevTools, then
+# pipe it in. See the repo README for the walkthrough.
+[auth]
+required = true
+login-command = "pbpaste | xfin auth login --stdin"
+
+# `xfin billing summary` renders a `Key: value` text block
+# (Balance / Due / Past due / Autopay).
+[summary]
+args = ["billing", "summary"]
+format = "text"
+balance-fields = ["Balance"]
+due-date-fields = ["Due"]
+
+[[operations]]
+id = "statements"
+name = "Statements"
+args = ["billing", "statements"]
+
+[[operations]]
+id = "usage"
+name = "Internet usage"
+args = ["internet", "usage"]
+
+[[operations]]
+id = "plan"
+name = "Internet plan"
+args = ["internet", "plan"]
