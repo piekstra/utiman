@@ -24,7 +24,31 @@ login-command = "fpl auth login"
 args = ["accounts", "balance"]
 format = "text"
 balance-fields = ["Balance"]
-due-date-fields = ["Due date"]
+# fpl 0.2.0 renamed the label "Due date" -> "Due" (family style); keep both
+# as a fallback chain so either CLI version maps.
+due-date-fields = ["Due", "Due date"]
+
+# `fpl bills list` renders a pipe table: BILL DATE | AMOUNT | DUE | KWH | DAYS.
+# Two series from one command: cost and consumption per billing cycle.
+[[series]]
+id = "bills"
+name = "Bill amounts"
+args = ["bills", "list"]
+format = "table"
+label-field = "Bill date"
+value-fields = ["Amount"]
+unit = "usd"
+chart = "bar"
+
+[[series]]
+id = "kwh"
+name = "Energy usage (kWh per cycle)"
+args = ["bills", "list"]
+format = "table"
+label-field = "Bill date"
+value-fields = ["KWH"]
+unit = "kWh"
+chart = "bar"
 
 [[operations]]
 id = "bills"
