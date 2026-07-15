@@ -1,25 +1,24 @@
 # Town of Jupiter, FL — water/utility billing.
-# CLI: https://github.com/piekstra/town-of-jupiter-fl (binary `tojfl`)
+# CLI: https://github.com/piekstra/town-of-jupiter-fl-cli (binary `tojfl`)
 
 id = "tojfl"
 name = "Town of Jupiter Water"
 kind = "water"
 binary = "tojfl"
-repo = "https://github.com/piekstra/town-of-jupiter-fl"
+repo = "https://github.com/piekstra/town-of-jupiter-fl-cli"
 description = "Town of Jupiter utility billing portal: account summary, billing and usage history, transactions."
 
+# tojfl conforms to piekstra-cli/1 (family `pk-cli-selfupdate` — installs
+# without prompting — and `auth status --json` → `authenticated`), so
+# self-update and auth-status use the family defaults.
 [install]
 kind = "cargo-git"
-git = "https://github.com/piekstra/town-of-jupiter-fl"
+git = "https://github.com/piekstra/town-of-jupiter-fl-cli"
 package = "tojfl-cli"
-self-update-args = ["self-update", "--yes"]
-update-check-args = ["self-update", "--check"]
 
 [auth]
 required = true
 login-command = "tojfl auth login --save"
-status-args = ["auth", "status", "--json"]
-authenticated-field = "authenticated"
 
 # `tojfl account show --json` serializes the account summary; money values are
 # objects like {"cents": 8421}, hence the `.cents` path and cents scale.

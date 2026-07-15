@@ -95,12 +95,12 @@ pub struct Auth {
     /// collects or stores credentials itself.
     #[serde(default)]
     pub login_command: Option<String>,
-    /// Non-secret args that report auth state as JSON
-    /// (e.g. ["auth", "status", "--json"]).
+    /// Non-secret args that report auth state as JSON. Defaults to the
+    /// family-standard ["auth", "status", "--json"] (piekstra-cli/1).
     #[serde(default)]
     pub status_args: Option<Vec<String>>,
-    /// Dot-path into the status JSON whose truthy value means "signed in"
-    /// (e.g. "authenticated", "password_in_keychain").
+    /// Dot-path into the status JSON whose truthy value means "signed in".
+    /// Defaults to "authenticated" (the auth-status/v1 field).
     #[serde(default)]
     pub authenticated_field: Option<String>,
 }

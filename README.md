@@ -38,9 +38,9 @@ pane of glass. The built-in catalog:
 
 | Provider | CLI | What it is |
 |---|---|---|
-| [FPL Electric](https://github.com/piekstra/fpl) | `fpl` | Florida Power & Light |
-| [Town of Jupiter Water](https://github.com/piekstra/town-of-jupiter-fl) | `tojfl` | Town of Jupiter, FL utility billing |
-| [Loxahatchee River Sewer](https://github.com/piekstra/loxahatchee-river-fl) | `lrfl` | Loxahatchee River District |
+| [FPL Electric](https://github.com/piekstra/fpl-cli) | `fpl` | Florida Power & Light |
+| [Town of Jupiter Water](https://github.com/piekstra/town-of-jupiter-fl-cli) | `tojfl` | Town of Jupiter, FL utility billing |
+| [Loxahatchee River Sewer](https://github.com/piekstra/loxahatchee-river-fl-cli) | `lrfl` | Loxahatchee River District |
 
 ## Install
 

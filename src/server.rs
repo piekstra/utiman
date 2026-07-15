@@ -318,7 +318,12 @@ async fn start_install(State(app): State<Arc<App>>, Path(id): Path<String>) -> R
     let Some(spec) = &p.manifest.install else {
         return err(StatusCode::BAD_REQUEST, format!("{id} has no install spec"));
     };
-    let self_update = find_binary(&p.manifest.binary).zip(spec.self_update_args.clone());
+    // Conforming CLIs default to the standard `self-update` spelling.
+    let self_update_args = spec
+        .self_update_args
+        .clone()
+        .unwrap_or_else(|| vec!["self-update".into()]);
+    let self_update = find_binary(&p.manifest.binary).map(|b| (b, self_update_args));
     let argv = match self_update {
         Some((bin, args)) => {
             let mut v = vec![bin.display().to_string()];
@@ -342,14 +347,13 @@ async fn update_check(Path(id): Path<String>) -> Response {
     let Some(p) = find_provider(&id) else {
         return err(StatusCode::NOT_FOUND, format!("no provider {id}"));
     };
-    let Some(args) = p
-        .manifest
-        .install
-        .as_ref()
-        .and_then(|i| i.update_check_args.clone())
-    else {
+    let Some(install) = p.manifest.install.as_ref() else {
         return err(StatusCode::BAD_REQUEST, format!("{id} has no update check"));
     };
+    let args = install
+        .update_check_args
+        .clone()
+        .unwrap_or_else(|| vec!["self-update".into(), "--check".into(), "--json".into()]);
     let Some(bin) = find_binary(&p.manifest.binary) else {
         return err(
             StatusCode::CONFLICT,
@@ -381,13 +385,19 @@ async fn auth_status(Path(id): Path<String>) -> Response {
     let Some(p) = find_provider(&id) else {
         return err(StatusCode::NOT_FOUND, format!("no provider {id}"));
     };
-    let auth = p.manifest.auth.as_ref();
-    let (Some(args), Some(field)) = (
-        auth.and_then(|a| a.status_args.clone()),
-        auth.and_then(|a| a.authenticated_field.clone()),
-    ) else {
+    // Conforming CLIs (piekstra-cli/1) need no per-provider config: default
+    // to `auth status --json` and its canonical `authenticated` field.
+    let Some(auth) = p.manifest.auth.as_ref() else {
         return Json(json!({ "state": "unknown" })).into_response();
     };
+    let args = auth
+        .status_args
+        .clone()
+        .unwrap_or_else(|| vec!["auth".into(), "status".into(), "--json".into()]);
+    let field = auth
+        .authenticated_field
+        .clone()
+        .unwrap_or_else(|| "authenticated".into());
     let Some(bin) = find_binary(&p.manifest.binary) else {
         return Json(json!({ "state": "unknown" })).into_response();
     };
