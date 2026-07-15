@@ -1,0 +1,48 @@
+# Xfinity — internet / cable.
+# CLI: https://github.com/piekstra/xfinity-cli (binary `xfin`)
+
+id = "xfin"
+name = "Xfinity Internet"
+kind = "internet"
+binary = "xfin"
+repo = "https://github.com/piekstra/xfinity-cli"
+description = "Xfinity: balance/due, statement history, data usage, and service outages."
+
+# xfin conforms to piekstra-cli/1, so self-update and auth-status use the
+# family defaults (`self-update`, `auth status --json` → `authenticated`).
+[install]
+kind = "cargo-git"
+git = "https://github.com/piekstra/xfinity-cli"
+
+[auth]
+required = true
+login-command = "xfin auth login"
+
+# `xfin billing summary` prints a normalized `Balance:` / `Due:` text block
+# (the underlying API's JSON key names vary), so parse the summary in text mode
+# against the stable labels — the same approach fpl uses.
+[summary]
+args = ["billing", "summary"]
+format = "text"
+balance-fields = ["Balance"]
+due-date-fields = ["Due"]
+
+[[operations]]
+id = "statements"
+name = "Statement history"
+args = ["billing", "statements"]
+
+[[operations]]
+id = "usage"
+name = "Internet data usage"
+args = ["internet", "usage"]
+
+[[operations]]
+id = "outages"
+name = "Service outages"
+args = ["outages"]
+
+[[operations]]
+id = "auth-status"
+name = "Auth status"
+args = ["auth", "status"]
