@@ -24,7 +24,9 @@ login-command = "fpl auth login"
 args = ["accounts", "balance"]
 format = "text"
 balance-fields = ["Balance"]
-due-date-fields = ["Due date"]
+# fpl 0.2.0 renamed the label "Due date" -> "Due" (family style); keep both
+# as a fallback chain so either CLI version maps.
+due-date-fields = ["Due", "Due date"]
 
 [[operations]]
 id = "bills"
