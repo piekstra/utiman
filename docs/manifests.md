@@ -122,6 +122,33 @@ credentials. Three levels of integration, all optional:
   signed in (status commands conventionally exit 0 either way, so the answer
   has to come from the output). With both set, cards show a
   "Signed in" / "Sign-in needed" chip.
+- `login-steps`: an ordered list of human steps shown before the command in
+  the provider's **Setup & sign-in** drawer section — for flows that need
+  browser work first (e.g. capturing a session cookie). Backtick spans render
+  as inline code. The provider's own detail drawer always shows a sign-in
+  section when `required = true`, not only when a fetch fails.
+
+### `[[setup]]`
+
+Non-secret setup **values** utiman collects in a form and applies by running
+the CLI — e.g. saving an account number. utiman appends the entered value as
+the final argument: `[[setup]]` with `args = ["config", "set-account"]` runs
+`<binary> config set-account <value>`.
+
+```toml
+[[setup]]
+id = "account"
+name = "Account number"
+description = "The NNNNNNN-N number from your bill."
+args = ["config", "set-account"]
+placeholder = "1234567-0"
+```
+
+This is **only for non-secret values** (account numbers, meter ids) — the kind
+that live in plain config and appear in URLs. Credentials never go here; they
+go through `[auth]` and the terminal, so utiman's "never handles secrets"
+guarantee holds. The value is passed as a single argv element (no shell), and
+the CLI's own validation decides whether it's accepted.
 
 ### `[summary]`
 

@@ -41,6 +41,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/providers/{id}/update-check", post(update_check))
         .route("/api/providers/{id}/auth-status", get(auth_status))
         .route("/api/providers/{id}/login-terminal", post(login_terminal))
+        .route("/api/providers/{id}/setup/{setup_id}", post(run_setup))
         .route("/api/providers/{id}/snapshots", get(snapshots_for))
         .route("/api/providers/{id}/series/{sid}", get(series_data))
         .route("/api/providers/{id}/doc/{docid}", get(download_document))
@@ -303,6 +304,46 @@ async fn run_operation(Path((id, opid)): Path<(String, String)>) -> Response {
         "status": out.status,
         "stdout": out.stdout,
         "stderr": tail(&out.stderr, 4000),
+        "timed_out": out.timed_out,
+    }))
+    .into_response()
+}
+
+#[derive(Deserialize)]
+struct SetupBody {
+    value: String,
+}
+
+/// Apply a non-secret setup input: run `<binary> <args...> <value>`. The value
+/// is passed as a single trailing argv element (no shell), and setup inputs are
+/// declared only for non-secret values — credentials never reach this path.
+async fn run_setup(
+    Path((id, setup_id)): Path<(String, String)>,
+    Json(body): Json<SetupBody>,
+) -> Response {
+    let Some(p) = find_provider(&id) else {
+        return err(StatusCode::NOT_FOUND, format!("no provider {id}"));
+    };
+    let Some(input) = p.manifest.setup.iter().find(|s| s.id == setup_id) else {
+        return err(StatusCode::NOT_FOUND, format!("{id} has no setup {setup_id}"));
+    };
+    let value = body.value.trim();
+    if value.is_empty() {
+        return err(StatusCode::BAD_REQUEST, format!("{} requires a value", input.name));
+    }
+    let Some(bin) = find_binary(&p.manifest.binary) else {
+        return err(
+            StatusCode::CONFLICT,
+            format!("{} is not installed", p.manifest.binary),
+        );
+    };
+    let mut args = input.args.clone();
+    args.push(value.to_string());
+    let out = run_cli(&bin, &args, Duration::from_secs(DEFAULT_TIMEOUT_SECS)).await;
+    Json(json!({
+        "ok": out.ok(),
+        "stdout": out.stdout,
+        "stderr": tail(&out.stderr, 2000),
         "timed_out": out.timed_out,
     }))
     .into_response()

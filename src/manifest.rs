@@ -37,9 +37,15 @@ pub struct Manifest {
     #[serde(default)]
     pub description: Option<String>,
     /// One-time, non-secret setup the user runs in their own terminal
-    /// (e.g. saving a default account number).
+    /// (e.g. saving a default account number). Display-only hint; for a
+    /// value utiman can collect and apply itself, use `[[setup]]`.
     #[serde(default)]
     pub setup_command: Option<String>,
+    /// Non-secret setup inputs utiman collects in a form and applies by
+    /// running the CLI (e.g. saving an account number). Never for secrets —
+    /// those go through `[auth]` and the terminal.
+    #[serde(default)]
+    pub setup: Vec<SetupInput>,
     #[serde(default)]
     pub install: Option<Install>,
     #[serde(default)]
@@ -104,6 +110,28 @@ pub struct Auth {
     /// Defaults to "authenticated" (the auth-status/v1 field).
     #[serde(default)]
     pub authenticated_field: Option<String>,
+    /// Ordered human steps shown before the login command, for flows that
+    /// need browser work first (e.g. capturing a session cookie).
+    #[serde(default)]
+    pub login_steps: Vec<String>,
+}
+
+/// A non-secret setup value utiman collects in a form and applies by running
+/// `<binary> <args...> <value>` (e.g. `lrfl config set-account 1234567-0`).
+/// Deliberately not for secrets — credentials go through `[auth]`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct SetupInput {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    /// CLI args before the value, e.g. ["config", "set-account"]. utiman
+    /// appends the user's value as the final argument.
+    pub args: Vec<String>,
+    /// Example value shown in the empty field.
+    #[serde(default)]
+    pub placeholder: Option<String>,
 }
 
 /// How to run the CLI and pull dashboard fields out of what it prints.
@@ -259,6 +287,11 @@ fn validate(m: &Manifest) -> Result<()> {
             bail!("document {}: filename must be a plain name", d.id);
         }
     }
+    for s in &m.setup {
+        if s.args.is_empty() {
+            bail!("setup {}: args must not be empty", s.id);
+        }
+    }
     if let Some(i) = &m.install {
         match i.kind.as_str() {
             "cargo-git" if i.git.is_none() => {
@@ -356,6 +389,47 @@ name = "X"
 binary = "x"
 repo = "https://example.com"
 surprise = true
+"#;
+        assert!(parse_manifest(bad).is_err());
+    }
+
+    #[test]
+    fn parses_setup_inputs_and_login_steps() {
+        let text = r#"
+id = "x"
+name = "X"
+binary = "x"
+repo = "https://example.com"
+
+[auth]
+required = true
+login-command = "pbpaste | x auth login --stdin"
+login-steps = ["Sign in", "Copy the `Cookie` header"]
+
+[[setup]]
+id = "account"
+name = "Account number"
+args = ["config", "set-account"]
+placeholder = "1234567-0"
+"#;
+        let m = parse_manifest(text).unwrap();
+        assert_eq!(m.setup.len(), 1);
+        assert_eq!(m.setup[0].args, ["config", "set-account"]);
+        assert_eq!(m.auth.unwrap().login_steps.len(), 2);
+    }
+
+    #[test]
+    fn rejects_setup_without_args() {
+        let bad = r#"
+id = "x"
+name = "X"
+binary = "x"
+repo = "https://example.com"
+
+[[setup]]
+id = "account"
+name = "Account"
+args = []
 "#;
         assert!(parse_manifest(bad).is_err());
     }
