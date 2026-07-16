@@ -325,11 +325,17 @@ async fn run_setup(
         return err(StatusCode::NOT_FOUND, format!("no provider {id}"));
     };
     let Some(input) = p.manifest.setup.iter().find(|s| s.id == setup_id) else {
-        return err(StatusCode::NOT_FOUND, format!("{id} has no setup {setup_id}"));
+        return err(
+            StatusCode::NOT_FOUND,
+            format!("{id} has no setup {setup_id}"),
+        );
     };
     let value = body.value.trim();
     if value.is_empty() {
-        return err(StatusCode::BAD_REQUEST, format!("{} requires a value", input.name));
+        return err(
+            StatusCode::BAD_REQUEST,
+            format!("{} requires a value", input.name),
+        );
     }
     let Some(bin) = find_binary(&p.manifest.binary) else {
         return err(
