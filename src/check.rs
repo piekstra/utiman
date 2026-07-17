@@ -72,13 +72,8 @@ pub async fn run(within: i64, notify: bool, json: bool) -> Result<i32> {
         }
     }
 
-    // Soonest first; undated dates sort last.
-    dues.sort_by_key(|d| d.days.unwrap_or(i64::MAX));
-
-    let soon: Vec<&Due> = dues
-        .iter()
-        .filter(|d| d.days.map(|n| n <= within).unwrap_or(false))
-        .collect();
+    triage(&mut dues); // soonest-first, undated last
+    let soon: Vec<&Due> = dues.iter().filter(|d| is_soon(d, within)).collect();
 
     if json {
         print_json(&dues, &errors, within);
@@ -90,7 +85,28 @@ pub async fn run(within: i64, notify: bool, json: bool) -> Result<i32> {
         raise_notification(&soon);
     }
 
-    Ok(if soon.is_empty() { 0 } else { 2 })
+    Ok(exit_code(soon.is_empty()))
+}
+
+/// Order the report soonest-first; undated items sort last.
+fn triage(dues: &mut [Due]) {
+    dues.sort_by_key(|d| d.days.unwrap_or(i64::MAX));
+}
+
+/// A bill is "due soon" when it has a date within the window (or overdue).
+/// Undated bills are never "soon" — we can't say when they're due.
+fn is_soon(d: &Due, within: i64) -> bool {
+    d.days.map(|n| n <= within).unwrap_or(false)
+}
+
+/// Process exit code: 2 when anything is due soon/overdue (so cron can act),
+/// else 0.
+fn exit_code(none_soon: bool) -> i32 {
+    if none_soon {
+        0
+    } else {
+        2
+    }
 }
 
 fn money(b: Option<f64>) -> String {
@@ -199,5 +215,48 @@ mod tests {
     #[test]
     fn applescript_escaping() {
         assert_eq!(applescript_escape(r#"a"b\c"#), r#"a\"b\\c"#);
+    }
+
+    fn due(name: &str, days: Option<i64>) -> Due {
+        Due {
+            name: name.into(),
+            balance: Some(10.0),
+            due_raw: "x".into(),
+            days,
+        }
+    }
+
+    #[test]
+    fn triage_sorts_soonest_first_undated_last() {
+        let mut v = vec![
+            due("later", Some(20)),
+            due("undated", None),
+            due("overdue", Some(-3)),
+            due("soon", Some(2)),
+        ];
+        triage(&mut v);
+        let order: Vec<&str> = v.iter().map(|d| d.name.as_str()).collect();
+        assert_eq!(order, ["overdue", "soon", "later", "undated"]);
+    }
+
+    #[test]
+    fn is_soon_window_boundary_and_overdue() {
+        assert!(is_soon(&due("", Some(-1)), 5), "overdue is soon");
+        assert!(is_soon(&due("", Some(0)), 5), "due today is soon");
+        assert!(
+            is_soon(&due("", Some(5)), 5),
+            "exactly at the window is soon"
+        );
+        assert!(
+            !is_soon(&due("", Some(6)), 5),
+            "past the window is not soon"
+        );
+        assert!(!is_soon(&due("", None), 5), "undated is never soon");
+    }
+
+    #[test]
+    fn exit_code_maps_soonness() {
+        assert_eq!(exit_code(true), 0, "nothing soon → 0");
+        assert_eq!(exit_code(false), 2, "something soon → 2 (cron acts)");
     }
 }
