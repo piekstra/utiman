@@ -5,6 +5,8 @@
 //! no credentials: each CLI manages its own (typically in the OS keychain),
 //! and anything interactive (logins) happens in your terminal, not here.
 
+mod check;
+mod dates;
 mod detect;
 mod extract;
 mod install;
@@ -12,6 +14,7 @@ mod manifest;
 mod runner;
 mod server;
 mod snapshots;
+mod summary;
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
@@ -44,6 +47,19 @@ enum Command {
         /// Path to a manifest TOML file.
         file: PathBuf,
     },
+    /// Report which bills are due (and how soon). Exit code 2 if anything is
+    /// due within --within days or overdue — handy from cron.
+    Check {
+        /// Days-ahead window for "due soon" (and notifications).
+        #[arg(long, default_value_t = 5)]
+        within: i64,
+        /// Raise a macOS notification for due-soon bills.
+        #[arg(long)]
+        notify: bool,
+        /// Emit JSON instead of a text table.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[tokio::main]
@@ -53,6 +69,14 @@ async fn main() -> Result<()> {
         Command::Serve => serve(cli.port, !cli.no_open).await,
         Command::List => list().await,
         Command::Register { file } => register(&file),
+        Command::Check {
+            within,
+            notify,
+            json,
+        } => {
+            let code = check::run(within, notify, json).await?;
+            std::process::exit(code);
+        }
     }
 }
 
