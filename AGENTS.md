@@ -12,13 +12,16 @@ shells out to provider binaries described by TOML manifests.
 
 | Path | Responsibility |
 |------|----------------|
-| `src/main.rs` | clap CLI: `serve` (default), `list`, `register` |
+| `src/main.rs` | clap CLI: `serve` (default), `list`, `register`, `check` |
 | `src/manifest.rs` | manifest schema, validation, builtin+user loading/merge |
 | `src/extract.rs` | balance/due-date extraction: JSON dot-paths, text labels, money parsing |
 | `src/runner.rs` | spawn a provider CLI (no shell), capture output, timeout kill |
 | `src/detect.rs` | PATH lookup + `--version` probe |
 | `src/install.rs` | background install/update tasks with streamed logs |
 | `src/snapshots.rs` | local balance history (`~/.local/share/utiman/history/*.jsonl`) |
+| `src/summary.rs` | shared "run summary → balance + due" helper (server + `check`) |
+| `src/check.rs` | `utiman check`: due-date report, urgency triage, macOS notify |
+| `src/dates.rs` | dependency-free date parsing (ISO/US) + days-from-today math |
 | `src/server.rs` | axum routes, Host-header guard, API handlers |
 | `src/assets/` | embedded frontend (index.html / app.js / charts.js / style.css) |
 | `catalog/` | built-in provider manifests (embedded via `include_str!`) |

@@ -79,7 +79,24 @@ utiman                        # serve + open browser
 utiman --port 9000 --no-open  # serve only
 utiman list                   # providers + installed/version status
 utiman register acme.toml     # add a provider manifest
+utiman check                  # what's due, and how soon
 ```
+
+### Due-date checks & reminders
+
+`utiman check` runs every installed provider's summary and reports what you
+owe, soonest first. It exits `2` when anything is due within `--within` days
+(default 5) or overdue, and `--notify` raises a macOS notification — so a cron
+job or launchd timer can nag you before a bill is late:
+
+```sh
+utiman check                     # text table; a `*` marks due-soon, `!` overdue
+utiman check --within 7 --notify # notify about anything due within a week
+utiman check --json              # machine-readable, for scripting
+```
+
+Paid-in-full accounts are omitted; a provider whose session expired shows the
+CLI's own "sign in again" message instead of a balance.
 
 ## Security posture
 
