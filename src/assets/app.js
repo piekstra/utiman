@@ -867,9 +867,24 @@ async function refresh() {
     renderCatalog();
     renderDashboard();
     await loadAll();
+    // Rebuild an open drawer against the fresh data — otherwise a saved setup
+    // value or a completed sign-in leaves its Setup & sign-in section stale
+    // (openDrawer's same-id guard skips a rebuild while it stays open).
+    reopenDrawerIfOpen();
   } finally {
     btn.classList.remove("busy");
   }
+}
+
+function reopenDrawerIfOpen() {
+  if (!drawerOpenFor) return;
+  const p = state.providers.find((x) => x.id === drawerOpenFor);
+  if (!p) {
+    hideDrawer();
+    return;
+  }
+  drawerOpenFor = null; // bypass openDrawer's same-id early return
+  openDrawer(p);
 }
 
 $("#refresh").addEventListener("click", refresh);
