@@ -148,11 +148,14 @@ function renderStats() {
 
   // The total only sums accounts we could read. If some failed (expired
   // session etc.), say so — an unqualified total would silently under-report.
+  // Count only providers whose summary actually errored; ones still loading
+  // (no summary entry yet) aren't "couldn't be read", so the caveat doesn't
+  // flash during a refresh.
   const installed = summaryProviders().length;
-  const unread = installed - [...state.summaries.values()].filter((s) => s.state === "ok").length;
+  const failed = [...state.summaries.values()].filter((s) => s.state === "error").length;
   const note = $("#hero-caveat");
-  if (unread > 0 && installed > 0) {
-    note.textContent = `${unread} of ${installed} account${installed === 1 ? "" : "s"} couldn't be read`;
+  if (failed > 0 && installed > 0) {
+    note.textContent = `${failed} of ${installed} account${installed === 1 ? "" : "s"} couldn't be read`;
     note.hidden = false;
   } else {
     note.hidden = true;
@@ -826,6 +829,9 @@ function renderCatalog() {
 // Fetch a provider document (the CLI can run ~120s) with visible progress,
 // then trigger a browser save. Falls back to nothing destructive on error.
 async function downloadDocument(p, d, anchor) {
+  // Re-entrancy guard: these run the CLI for up to ~120s, so ignore repeat
+  // clicks while one is already in flight (else duplicate fetches + saves).
+  if (anchor.classList.contains("loading")) return;
   anchor.classList.add("loading");
   const spin = icon("i-refresh");
   spin.classList.add("spin");

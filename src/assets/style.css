@@ -244,6 +244,8 @@ main { max-width: 1080px; margin: 0 auto; padding: 26px 20px 60px; }
 .card-refresh { padding: 5px; color: var(--ink-muted); opacity: 0; transition: opacity 0.15s ease, color 0.15s ease; }
 .card-refresh .ic { width: 15px; height: 15px; }
 .card.clickable:hover .card-refresh { opacity: 1; }
+/* Keyboard users must see the button when it's focused, not just on hover. */
+.card-refresh:focus-visible { opacity: 1; }
 .card-refresh:hover { color: var(--ink); }
 .card-refresh.busy { opacity: 1; }
 .card-refresh.busy .ic { animation: spin 0.9s linear infinite; }
