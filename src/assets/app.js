@@ -256,6 +256,8 @@ function renderCards() {
         due.append("No due date reported");
       }
       card.append(due);
+      const pay = payButton(p);
+      if (pay) card.append(el("div", { class: "card-pay" }, pay));
     } else {
       card.append(statusLine("crit", "i-x", s.timed_out ? "Timed out" : "Couldn't fetch"));
       if (s.hint) {
@@ -484,6 +486,16 @@ function openDrawer(p) {
 
   const setupSec = renderSetupSection(p);
   if (setupSec) body.append(setupSec);
+
+  // Pay: hand off to the official payment page.
+  const drawerPay = payButton(p, "small pay-btn");
+  if (drawerPay) {
+    const paySec = drawerSection("Pay");
+    const note = el("div", { class: "entry-meta" },
+      "Opens the provider's official payment page — utiman never sees your card.");
+    paySec.append(drawerPay, note);
+    body.append(paySec);
+  }
 
   // Provider-reported series, each with insight chips + chart.
   for (const s of p.series || []) {
@@ -769,6 +781,36 @@ function loginTerminalButton(p, label = "Open login in Terminal") {
     try {
       await api(`/api/providers/${p.id}/login-terminal`, { method: "POST" });
       toast(`Terminal opened — refresh when you're signed in.`);
+    } catch (e) {
+      toast(String(e.message || e), "err");
+    }
+    btn.disabled = false;
+  });
+  return btn;
+}
+
+/** A "Pay bill" button that hands off to the provider's official payment page:
+ * a link for the `url` form, or a POST that runs the CLI for `open-args`.
+ * utiman never sees card data. Returns null when the provider has no pay
+ * config or isn't installed. */
+function payButton(p, cls = "small pay-btn") {
+  const pay = p.pay;
+  if (!pay || !p.detection.installed) return null;
+  const label = pay.label || "Pay bill";
+  if (pay.url) {
+    const a = el("a", { class: `btn ${cls}`, href: pay.url, target: "_blank", rel: "noreferrer" });
+    a.append(icon("i-card"), label);
+    return a;
+  }
+  const btn = el("button", { class: cls });
+  btn.append(icon("i-card"), label);
+  btn.addEventListener("click", async (ev) => {
+    ev.stopPropagation();
+    btn.disabled = true;
+    try {
+      const r = await api(`/api/providers/${p.id}/pay`, { method: "POST" });
+      toast(r.ok ? `${p.name}: opened payment page` : (r.stderr || "couldn't open pay page"),
+        r.ok ? "ok" : "err");
     } catch (e) {
       toast(String(e.message || e), "err");
     }

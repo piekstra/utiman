@@ -51,6 +51,11 @@ balance-fields = ["balance_due"]     # fallbacks, tried in order
 due-date-fields = ["due_date"]
 # scale = "cents"                    # divide the balance by 100
 
+[pay]                                # hand off to the official payment page
+open-args = ["pay", "--open"]        # run the CLI to open it; OR:
+# url = "https://acme.example/pay"   # open a portal URL directly
+label = "Pay bill"                   # button text (default "Pay bill")
+
 [[series]]                           # charted in the provider's detail drawer
 id = "usage"
 name = "Water usage by period"
@@ -185,6 +190,25 @@ File-producing commands, offered as downloads in the detail drawer. utiman
 appends `<out-flag> <temp path>` to `args`, runs the command (120s timeout),
 streams the file back with `filename` as the download name, and deletes the
 temp file. The extension picks the content type (pdf/csv/json/txt).
+
+### `[pay]`
+
+How to pay — utiman only ever opens the provider's **official** payment page,
+never collecting or transmitting card data. Set exactly one of:
+
+- `open-args`: CLI args that hand off to the pay page (utiman runs
+  `<binary> <open-args>`; the CLI opens the browser). e.g. `["pay", "--open"]`.
+- `url`: a payment-portal URL opened directly in the browser — for CLIs whose
+  only payment command *makes* a payment (which utiman won't drive) or that
+  need flags utiman can't supply.
+
+`label` sets the button text (default "Pay bill").
+
+```toml
+[pay]
+open-args = ["pay", "--open"]   # or: url = "https://provider.example/pay"
+label = "Pay bill"
+```
 
 ### `[[operations]]`
 

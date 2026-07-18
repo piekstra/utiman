@@ -302,6 +302,18 @@ svg.sparkline { width: 120px; height: 30px; }
 }
 .card-more .ic { width: 13px; height: 13px; transition: transform 0.15s ease; }
 .card.clickable:hover .card-more .ic { transform: translateX(2px); }
+
+/* Pay button — accent-outlined, the one clear call-to-action on a card. */
+.card-pay { margin-top: 2px; }
+.pay-btn {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+.pay-btn:hover { border-color: var(--accent); text-decoration: none; }
+.pay-btn .ic { color: var(--accent); }
+.drawer-section > .pay-btn { margin-bottom: 6px; }
 .skeleton {
   height: 38px;
   border-radius: 8px;

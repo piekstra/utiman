@@ -71,3 +71,9 @@ args = ["usage", "compare", "--json"]
 id = "transactions"
 name = "Transactions"
 args = ["transactions", "list", "--json"]
+
+# tojfl's `pay open` needs explicit customer/account flags (not config-driven),
+# so hand off to the billing portal instead.
+[pay]
+url = "https://utilitybill.jupiter.fl.us"
+label = "Pay at portal"
