@@ -12,7 +12,8 @@ shells out to provider binaries described by TOML manifests.
 
 | Path | Responsibility |
 |------|----------------|
-| `src/main.rs` | clap CLI: `serve` (default), `list`, `register`, `check` |
+| `src/main.rs` | clap CLI: `serve` (default), `list`, `register`, `check`, `self-update` |
+| `build.rs` | bakes `BUILD_TARGET` (target triple) for self-update asset selection |
 | `src/manifest.rs` | manifest schema, validation, builtin+user loading/merge |
 | `src/extract.rs` | balance/due-date extraction: JSON dot-paths, text labels, money parsing |
 | `src/runner.rs` | spawn a provider CLI (no shell), capture output, timeout kill |
