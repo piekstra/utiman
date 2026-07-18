@@ -123,7 +123,9 @@ async fn list_providers(State(app): State<Arc<App>>) -> Json<Value> {
             installing,
         });
     }
-    Json(json!({ "providers": out }))
+    // `host.os` lets the frontend tailor OS-specific affordances (the
+    // Open-in-Terminal login flow is macOS-only).
+    Json(json!({ "providers": out, "host": { "os": std::env::consts::OS } }))
 }
 
 fn err(status: StatusCode, msg: impl Into<String>) -> Response {
