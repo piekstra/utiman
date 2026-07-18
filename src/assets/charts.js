@@ -117,20 +117,30 @@ function plot(spec, container) {
   const M = { top: 12, right: 12, bottom: 26, left: 56 };
   const iw = W - M.left - M.right;
   const ih = H - M.top - M.bottom;
-  const max = niceMax(Math.max(...points.map((p) => p.value)));
+  // A series that's all non-positive (e.g. account credits, which parse to
+  // negatives) would scale to an invisible chart. Scale by peak magnitude so
+  // those bars/line are visible; signed values still show in tooltip + table,
+  // and the axis labels carry the sign.
+  const rawMax = Math.max(...points.map((p) => p.value));
+  const allNonPositive = rawMax <= 0;
+  const domain = niceMax(allNonPositive ? Math.max(...points.map((p) => Math.abs(p.value))) : rawMax);
+  // Height fraction [0..1]: magnitude for an all-credit series, else clamp a
+  // stray negative to the baseline.
+  const frac = (v) => (allNonPositive ? Math.abs(v) : Math.max(0, v)) / domain;
 
   const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, class: "chart", role: "img" });
   svg.setAttribute("aria-label", spec.name);
 
   // Hairline gridlines + y labels at 0/half/max.
-  for (const frac of [0, 0.5, 1]) {
-    const y = M.top + ih - frac * ih;
+  for (const g of [0, 0.5, 1]) {
+    const y = M.top + ih - g * ih;
     svg.append(svgEl("line", {
       x1: M.left, x2: M.left + iw, y1: y, y2: y,
-      class: frac === 0 ? "axis-line" : "grid-line",
+      class: g === 0 ? "axis-line" : "grid-line",
     }));
     const lbl = svgEl("text", { x: M.left - 6, y: y + 4, class: "tick", "text-anchor": "end" });
-    lbl.textContent = fmtVal(max * frac, spec.unit === "usd" ? "usd" : undefined);
+    const labelVal = (allNonPositive ? -1 : 1) * domain * g;
+    lbl.textContent = fmtVal(labelVal, spec.unit === "usd" ? "usd" : undefined);
     svg.append(lbl);
   }
 
@@ -154,7 +164,7 @@ function plot(spec, container) {
   if (spec.chart === "line") {
     const xy = points.map((p, i) => [
       M.left + step * (i + 0.5),
-      M.top + ih - (p.value / max) * ih,
+      M.top + ih - frac(p.value) * ih,
     ]);
     const d = xy.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
     const base = M.top + ih;
@@ -177,7 +187,7 @@ function plot(spec, container) {
     // Bars: thin, rounded top (the data end), 2px gap on each side.
     const barW = Math.max(3, Math.min(28, step - 4));
     points.forEach((p, i) => {
-      const h = Math.max(1, (p.value / max) * ih);
+      const h = Math.max(1, frac(p.value) * ih);
       const x = M.left + step * i + (step - barW) / 2;
       const y = M.top + ih - h;
       const r = Math.min(4, barW / 2, h);
