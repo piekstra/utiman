@@ -51,6 +51,11 @@ balance-fields = ["balance_due"]     # fallbacks, tried in order
 due-date-fields = ["due_date"]
 # scale = "cents"                    # divide the balance by 100
 
+[pay]                                # hand off to the official payment page
+open-args = ["pay", "--open"]        # run the CLI to open it; OR:
+# url = "https://acme.example/pay"   # open a portal URL directly
+label = "Pay bill"                   # button text (default "Pay bill")
+
 [[series]]                           # charted in the provider's detail drawer
 id = "usage"
 name = "Water usage by period"

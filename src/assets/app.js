@@ -488,7 +488,7 @@ function openDrawer(p) {
   if (setupSec) body.append(setupSec);
 
   // Pay: hand off to the official payment page.
-  const drawerPay = payButton(p, "pay-btn");
+  const drawerPay = payButton(p, "small pay-btn");
   if (drawerPay) {
     const paySec = drawerSection("Pay");
     const note = el("div", { class: "entry-meta" },
