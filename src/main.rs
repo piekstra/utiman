@@ -5,6 +5,7 @@
 //! no credentials: each CLI manages its own (typically in the OS keychain),
 //! and anything interactive (logins) happens in your terminal, not here.
 
+mod archive;
 mod check;
 mod dates;
 mod detect;

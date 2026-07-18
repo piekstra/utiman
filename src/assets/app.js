@@ -189,15 +189,17 @@ function renderHighlights() {
       const r = state.series.get(`${p.id}/${s.id}`);
       if (!r?.ok || r.points.length < 2) continue;
       const stats = seriesStats(r.points);
-      if (stats.deltaPct == null) continue;
+      const c = stats.compare;
+      if (!c || c.pct == null) continue;
       const line = el("div", { class: "highlight" });
-      const dir = stats.delta >= 0 ? "▲" : "▼";
-      const cls = stats.delta >= 0 ? "delta-up" : "delta-down";
+      const dir = c.delta >= 0 ? "▲" : "▼";
+      const cls = c.delta >= 0 ? "delta-up" : "delta-down";
+      const vs = c.seasonal ? `vs ${c.label} last year` : `vs ${c.label}`;
       line.append(
         el("strong", {}, p.name),
         `${s.name.toLowerCase()}: ${fmtVal(stats.latest.value, r.unit)} (`,
-        el("span", { class: cls }, `${dir} ${Math.abs(stats.deltaPct).toFixed(1)}%`),
-        ` vs ${stats.prev.label})`
+        el("span", { class: cls }, `${dir} ${Math.abs(c.pct).toFixed(1)}%`),
+        ` ${vs})`
       );
       box.append(line);
       break; // one highlight per provider

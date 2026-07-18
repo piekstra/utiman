@@ -84,7 +84,7 @@ fn first_text_field(stdout: &str, labels: &[String]) -> Option<String> {
 }
 
 /// One extracted series point.
-#[derive(Debug, PartialEq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Point {
     pub label: String,
     pub value: f64,

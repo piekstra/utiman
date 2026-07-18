@@ -211,10 +211,14 @@ async fn series_data(Path((id, sid)): Path<(String, String)>) -> Response {
         }))
         .into_response();
     }
-    let points = crate::extract::extract_series(series, &out.stdout);
+    let fresh = crate::extract::extract_series(series, &out.stdout);
+    // Fold this fetch into the local archive and return the merged history, so
+    // charts extend past the CLI's own window the longer utiman runs.
+    let points = crate::archive::merge(&id, &series.id, &fresh);
     Json(json!({
         "ok": true,
         "points": points,
+        "archived": points.len() > fresh.len(),
         "unit": series.unit,
         "chart": series.chart,
         "name": series.name,
