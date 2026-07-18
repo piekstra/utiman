@@ -383,9 +383,14 @@ function renderSetupSection(p) {
   const sec = drawerSection("Setup & sign-in");
   const authState = state.auth.get(p.id);
   if (needsAuth) {
-    sec.append(authState === "authenticated"
-      ? statusLine("good", "i-check", "Signed in")
-      : statusLine("warn", "i-x", "Not signed in"));
+    // Only show a definite state — "unknown"/loading (undefined) renders
+    // nothing, so a pending or failed auth-status check isn't mistaken for a
+    // confirmed sign-out (mirrors renderCards).
+    if (authState === "authenticated") {
+      sec.append(statusLine("good", "i-check", "Signed in"));
+    } else if (authState === "unauthenticated") {
+      sec.append(statusLine("warn", "i-x", "Not signed in"));
+    }
   }
 
   // Non-secret setup inputs: a form utiman applies by running the CLI.
@@ -431,7 +436,9 @@ function renderSetupSection(p) {
   }
 
   // Interactive login: numbered steps (if any) + the command + Open-in-Terminal.
-  if (needsAuth && authState !== "authenticated") {
+  // Show once auth is resolved and not signed in ("unauthenticated" or
+  // "unknown"); skip while still loading (undefined) so it doesn't flash.
+  if (needsAuth && authState !== undefined && authState !== "authenticated") {
     const cmd = p.auth["login-command"];
     const steps = p.auth["login-steps"] || [];
     if (steps.length) {
