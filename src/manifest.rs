@@ -52,6 +52,10 @@ pub struct Manifest {
     pub auth: Option<Auth>,
     #[serde(default)]
     pub summary: Option<Query>,
+    /// How to pay: hand off to the provider's official payment page (utiman
+    /// never touches card data).
+    #[serde(default)]
+    pub pay: Option<Pay>,
     #[serde(default)]
     pub operations: Vec<Operation>,
     /// Time-series data (usage, bill amounts, payments) rendered as charts.
@@ -165,6 +169,24 @@ pub struct Operation {
     pub id: String,
     pub name: String,
     pub args: Vec<String>,
+}
+
+/// How to pay a provider. utiman only ever opens the provider's *official*
+/// payment page — it never collects or transmits card data. Set exactly one
+/// of `open-args` (run the CLI to hand off to its Pay page) or `url` (open a
+/// payment portal directly in the browser).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct Pay {
+    /// CLI args that open the official pay page, e.g. ["pay", "--open"].
+    #[serde(default)]
+    pub open_args: Option<Vec<String>>,
+    /// A payment-portal URL to open in the browser.
+    #[serde(default)]
+    pub url: Option<String>,
+    /// Button label (default "Pay bill").
+    #[serde(default)]
+    pub label: Option<String>,
 }
 
 /// A time series the CLI can report: one labelled number per record.
@@ -292,6 +314,17 @@ fn validate(m: &Manifest) -> Result<()> {
             bail!("setup {}: args must not be empty", s.id);
         }
     }
+    if let Some(pay) = &m.pay {
+        match (&pay.open_args, &pay.url) {
+            (None, None) => bail!("pay: set either open-args or url"),
+            (Some(_), Some(_)) => bail!("pay: set only one of open-args or url"),
+            (Some(a), None) if a.is_empty() => bail!("pay.open-args must not be empty"),
+            (None, Some(u)) if !u.starts_with("https://") && !u.starts_with("http://") => {
+                bail!("pay.url must be an http(s) URL")
+            }
+            _ => {}
+        }
+    }
     if let Some(i) = &m.install {
         match i.kind.as_str() {
             "cargo-git" if i.git.is_none() => {
@@ -416,6 +449,28 @@ placeholder = "1234567-0"
         assert_eq!(m.setup.len(), 1);
         assert_eq!(m.setup[0].args, ["config", "set-account"]);
         assert_eq!(m.auth.unwrap().login_steps.len(), 2);
+    }
+
+    #[test]
+    fn pay_requires_exactly_one_of_open_args_or_url() {
+        let base = "id=\"x\"\nname=\"X\"\nbinary=\"x\"\nrepo=\"https://e.com\"\n";
+        assert!(parse_manifest(&format!("{base}[pay]\nopen-args=[\"pay\",\"--open\"]")).is_ok());
+        assert!(parse_manifest(&format!("{base}[pay]\nurl=\"https://e.com/pay\"")).is_ok());
+        assert!(
+            parse_manifest(&format!("{base}[pay]\n")).is_err(),
+            "neither"
+        );
+        assert!(
+            parse_manifest(&format!(
+                "{base}[pay]\nopen-args=[\"p\"]\nurl=\"https://e.com\""
+            ))
+            .is_err(),
+            "both"
+        );
+        assert!(
+            parse_manifest(&format!("{base}[pay]\nurl=\"ftp://e.com\"")).is_err(),
+            "non-http url"
+        );
     }
 
     #[test]

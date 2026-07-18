@@ -59,3 +59,7 @@ args = ["status", "--json"]
 id = "district"
 name = "District info"
 args = ["district", "--json"]
+
+[pay]
+open-args = ["pay", "--open"]
+label = "Pay bill"

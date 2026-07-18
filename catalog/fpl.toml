@@ -64,3 +64,9 @@ args = ["outages", "list"]
 id = "auth-status"
 name = "Auth status"
 args = ["auth", "status"]
+
+# fpl only exposes `payments create` (makes a real payment); hand off to the
+# official pay-bill page instead of processing a payment from utiman.
+[pay]
+url = "https://www.fpl.com/my-account/pay-bill.html"
+label = "Pay at FPL"
