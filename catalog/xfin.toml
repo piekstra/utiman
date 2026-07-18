@@ -55,3 +55,8 @@ args = ["outages"]
 id = "auth-status"
 name = "Auth status"
 args = ["auth", "status"]
+
+# xfin only exposes `payments create`; hand off to the Xfinity payment page.
+[pay]
+url = "https://www.xfinity.com/pay"
+label = "Pay at Xfinity"

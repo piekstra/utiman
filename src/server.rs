@@ -37,6 +37,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/providers", get(list_providers))
         .route("/api/providers/{id}/summary", get(provider_summary))
         .route("/api/providers/{id}/op/{opid}", post(run_operation))
+        .route("/api/providers/{id}/pay", post(open_pay))
         .route("/api/providers/{id}/install", post(start_install))
         .route("/api/providers/{id}/update-check", post(update_check))
         .route("/api/providers/{id}/auth-status", get(auth_status))
@@ -305,6 +306,39 @@ async fn run_operation(Path((id, opid)): Path<(String, String)>) -> Response {
         "stdout": out.stdout,
         "stderr": tail(&out.stderr, 4000),
         "timed_out": out.timed_out,
+    }))
+    .into_response()
+}
+
+/// Hand off to the provider's official pay page by running its `pay.open-args`
+/// (the CLI opens the browser). The `url` form is opened client-side, so this
+/// only handles the CLI hand-off. utiman never sees card data either way.
+async fn open_pay(Path(id): Path<String>) -> Response {
+    let Some(p) = find_provider(&id) else {
+        return err(StatusCode::NOT_FOUND, format!("no provider {id}"));
+    };
+    let Some(args) = p
+        .manifest
+        .pay
+        .as_ref()
+        .and_then(|pay| pay.open_args.clone())
+    else {
+        return err(
+            StatusCode::BAD_REQUEST,
+            format!("{id} has no pay open-args"),
+        );
+    };
+    let Some(bin) = find_binary(&p.manifest.binary) else {
+        return err(
+            StatusCode::CONFLICT,
+            format!("{} is not installed", p.manifest.binary),
+        );
+    };
+    let out = run_cli(&bin, &args, Duration::from_secs(DEFAULT_TIMEOUT_SECS)).await;
+    Json(json!({
+        "ok": out.ok(),
+        "stdout": out.stdout,
+        "stderr": tail(&out.stderr, 2000),
     }))
     .into_response()
 }
