@@ -9,8 +9,15 @@ repo = "https://github.com/piekstra/loxahatchee-river-fl-cli"
 description = "Loxahatchee River District: balance, charges, service status, and payment history. Guest-view reads; no login needed."
 
 # One-time setup: reads are anonymous guest-view lookups by account number,
-# so there is no login — just save your account once.
-setup-command = "lrfl config set-account <your-account>"
+# so there is no login — just save your account once. The account number is
+# non-secret (it's on your bill and in guest-view URLs), so utiman collects it
+# in a form and runs `lrfl config set-account` directly.
+[[setup]]
+id = "account"
+name = "Account number"
+description = "The NNNNNNN-N number from your bill (e.g. 1234567-0)."
+args = ["config", "set-account"]
+placeholder = "1234567-0"
 
 # lrfl conforms to piekstra-cli/1: family-default self-update spelling.
 [install]

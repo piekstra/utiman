@@ -369,6 +369,104 @@ function drawerSection(title) {
   return s;
 }
 
+/**
+ * "Setup & sign-in" drawer section. Shown when a provider needs a non-secret
+ * setup value (rendered as an in-app form utiman runs itself) or an
+ * interactive login (guidance + Open-in-Terminal; credentials never touch the
+ * app). Returns null when there's nothing to set up.
+ */
+function renderSetupSection(p) {
+  const inputs = p.setup || [];
+  const needsAuth = p.auth?.required;
+  if (!inputs.length && !needsAuth) return null;
+
+  const sec = drawerSection("Setup & sign-in");
+  const authState = state.auth.get(p.id);
+  if (needsAuth) {
+    // Only show a definite state — "unknown"/loading (undefined) renders
+    // nothing, so a pending or failed auth-status check isn't mistaken for a
+    // confirmed sign-out (mirrors renderCards).
+    if (authState === "authenticated") {
+      sec.append(statusLine("good", "i-check", "Signed in"));
+    } else if (authState === "unauthenticated") {
+      sec.append(statusLine("warn", "i-x", "Not signed in"));
+    }
+  }
+
+  // Non-secret setup inputs: a form utiman applies by running the CLI.
+  for (const input of inputs) {
+    const form = el("div", { class: "setup-form" });
+    form.append(el("label", { class: "setup-label" }, input.name));
+    if (input.description) form.append(el("div", { class: "entry-meta" }, input.description));
+    const row = el("div", { class: "row" });
+    const field = el("input", { type: "text", class: "setup-input", placeholder: input.placeholder || "" });
+    const save = el("button", { class: "small primary" }, "Save");
+    const msg = el("span", { class: "setup-msg" });
+    save.addEventListener("click", async () => {
+      const value = field.value.trim();
+      if (!value) { field.focus(); return; }
+      save.disabled = true;
+      msg.textContent = "…";
+      msg.className = "setup-msg";
+      try {
+        const r = await api(`/api/providers/${p.id}/setup/${input.id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value }),
+        });
+        if (r.ok) {
+          msg.textContent = "✓ saved";
+          msg.className = "setup-msg ok";
+          toast(`${p.name}: ${input.name} saved`);
+          refresh();
+        } else {
+          msg.textContent = (r.stderr || "failed").split("\n")[0].replace(/^error:\s*/, "");
+          msg.className = "setup-msg err";
+        }
+      } catch (e) {
+        msg.textContent = String(e.message || e);
+        msg.className = "setup-msg err";
+      }
+      save.disabled = false;
+    });
+    field.addEventListener("keydown", (ev) => { if (ev.key === "Enter") save.click(); });
+    row.append(field, save, msg);
+    form.append(row);
+    sec.append(form);
+  }
+
+  // Interactive login: numbered steps (if any) + the command + Open-in-Terminal.
+  // Show once auth is resolved and not signed in ("unauthenticated" or
+  // "unknown"); skip while still loading (undefined) so it doesn't flash.
+  if (needsAuth && authState !== undefined && authState !== "authenticated") {
+    const cmd = p.auth["login-command"];
+    const steps = p.auth["login-steps"] || [];
+    if (steps.length) {
+      const ol = el("ol", { class: "login-steps" });
+      for (const step of steps) ol.append(el("li", {}, stepWithCode(step)));
+      sec.append(ol);
+    }
+    if (cmd) {
+      const cmdRow = el("div", { class: "row" });
+      cmdRow.append(el("code", {}, cmd));
+      if (p.detection.installed) cmdRow.append(loginTerminalButton(p, "Open in Terminal"));
+      sec.append(cmdRow);
+    }
+    sec.append(el("div", { class: "entry-meta" },
+      "utiman never sees your password — sign-in happens in your terminal, and the CLI keeps the credential in your OS keychain."));
+  }
+  return sec;
+}
+
+// Render a guidance step, turning `backtick spans` into inline <code>.
+function stepWithCode(text) {
+  const frag = document.createDocumentFragment();
+  text.split(/`([^`]+)`/).forEach((part, i) => {
+    frag.append(i % 2 ? el("code", {}, part) : document.createTextNode(part));
+  });
+  return frag;
+}
+
 let drawerOpenFor = null;
 
 function openDrawer(p) {
@@ -383,6 +481,9 @@ function openDrawer(p) {
   body.replaceChildren();
   $("#drawer").hidden = false;
   $("#drawer-backdrop").hidden = false;
+
+  const setupSec = renderSetupSection(p);
+  if (setupSec) body.append(setupSec);
 
   // Provider-reported series, each with insight chips + chart.
   for (const s of p.series || []) {
@@ -773,9 +874,24 @@ async function refresh() {
     renderCatalog();
     renderDashboard();
     await loadAll();
+    // Rebuild an open drawer against the fresh data — otherwise a saved setup
+    // value or a completed sign-in leaves its Setup & sign-in section stale
+    // (openDrawer's same-id guard skips a rebuild while it stays open).
+    reopenDrawerIfOpen();
   } finally {
     btn.classList.remove("busy");
   }
+}
+
+function reopenDrawerIfOpen() {
+  if (!drawerOpenFor) return;
+  const p = state.providers.find((x) => x.id === drawerOpenFor);
+  if (!p) {
+    hideDrawer();
+    return;
+  }
+  drawerOpenFor = null; // bypass openDrawer's same-id early return
+  openDrawer(p);
 }
 
 $("#refresh").addEventListener("click", refresh);
