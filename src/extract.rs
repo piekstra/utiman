@@ -1,6 +1,12 @@
 //! Pull dashboard fields (balance, due date) out of CLI output.
 //!
-//! Two formats, matching how the provider CLIs print:
+//! The **utility/v1 profile fast path** comes first: a CLI emitting the
+//! canonical `utility-summary/v1` DTO or a `<record>-list/v1` `Paged`
+//! envelope (cli-common ≥ v0.2.0) needs no field configuration at all — the
+//! schema tag is authoritative and the manifest's field lists are ignored.
+//!
+//! Otherwise, two manifest-driven formats, matching how the provider CLIs
+//! print:
 //! - `json`: fields are dot-paths into the stdout JSON (`balance.cents`,
 //!   `services.0.due_date`). Numeric segments index arrays.
 //! - `text`: fields are labels matched case-insensitively against
@@ -21,6 +27,9 @@ pub struct SummaryFields {
 }
 
 pub fn extract_summary(query: &Query, stdout: &str) -> SummaryFields {
+    if let Some(fields) = profile_summary(stdout) {
+        return fields;
+    }
     let (balance_raw, due_date) = match query.format.as_str() {
         "text" => (
             first_text_field(stdout, &query.balance_fields),
@@ -40,6 +49,36 @@ pub fn extract_summary(query: &Query, stdout: &str) -> SummaryFields {
         balance = balance.map(|b| b / 100.0);
     }
     SummaryFields { balance, due_date }
+}
+
+/// utility/v1 fast path: a `utility-summary/v1` payload carries `balance` as
+/// a `Money` object (string-decimal `amount`) and an ISO `due_date` — no
+/// per-provider field configuration needed, whatever the manifest says.
+fn profile_summary(stdout: &str) -> Option<SummaryFields> {
+    let v: Value = serde_json::from_str(stdout).ok()?;
+    if v.get("schema")?.as_str()? != "utility-summary/v1" {
+        return None;
+    }
+    let balance = v
+        .get("balance")
+        .and_then(|m| m.get("amount"))
+        .and_then(Value::as_str)
+        .and_then(parse_money);
+    let due_date = v
+        .get("due_date")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    Some(SummaryFields { balance, due_date })
+}
+
+/// utility/v1 fast path for lists: a `<record>-list/v1` `Paged` envelope
+/// keeps its records under `items`.
+fn profile_items(root: &Value) -> Option<&Value> {
+    let schema = root.get("schema")?.as_str()?;
+    if !schema.ends_with("-list/v1") {
+        return None;
+    }
+    root.get("items").filter(|v| v.is_array())
 }
 
 /// Walk a dot-path (`a.b.0.c`) into a JSON value; numeric segments index arrays.
@@ -63,6 +102,17 @@ fn first_json_field<'v>(root: &'v Value, paths: &[String]) -> Option<&'v Value> 
 }
 
 fn json_scalar(v: &Value) -> String {
+    // A profile `Money` object scalarizes to its decimal amount, so
+    // `value-fields = ["amount"]` works on utility/v1 records. Detect by the
+    // fields Money actually carries (string amount + string currency) rather
+    // than key count, so additive DTO growth can't silently break this.
+    if let Some(map) = v.as_object() {
+        if map.get("currency").is_some_and(Value::is_string) {
+            if let Some(amount) = map.get("amount").and_then(Value::as_str) {
+                return amount.to_string();
+            }
+        }
+    }
     match v {
         Value::String(s) => s.clone(),
         other => other.to_string(),
@@ -92,13 +142,17 @@ pub struct Point {
 
 /// Extract labelled points from a series command's output.
 pub fn extract_series(series: &crate::manifest::Series, stdout: &str) -> Vec<Point> {
+    let mut profile_envelope = false;
     let records: Vec<serde_json::Map<String, Value>> = match series.format.as_str() {
         "table" => parse_pipe_table(stdout),
         _ => {
             let Ok(root) = serde_json::from_str::<Value>(stdout) else {
                 return Vec::new();
             };
-            let items = if series.items_path.is_empty() {
+            let items = if let Some(items) = profile_items(&root) {
+                profile_envelope = true;
+                Some(items)
+            } else if series.items_path.is_empty() {
                 Some(&root)
             } else {
                 json_path(&root, &series.items_path)
@@ -112,7 +166,10 @@ pub fn extract_series(series: &crate::manifest::Series, stdout: &str) -> Vec<Poi
         }
     };
 
-    let scale = if series.scale.as_deref() == Some("cents") {
+    // Profile semantics are canonical: Money is decimal dollars and
+    // quantities are plain numbers, so a stale manifest `scale = "cents"`
+    // must not divide values that came from a profile envelope.
+    let scale = if !profile_envelope && series.scale.as_deref() == Some("cents") {
         100.0
     } else {
         1.0
@@ -312,6 +369,114 @@ mod tests {
         let pts = extract_series(&s, out);
         assert_eq!(pts.len(), 1);
         assert_eq!(pts[0].value, 1.0);
+    }
+
+    #[test]
+    fn profile_summary_needs_no_field_config() {
+        // Manifest has no field lists at all — the schema tag drives it.
+        let q = query("json", &[], &[], None);
+        let out = r#"{"schema":"utility-summary/v1",
+                      "balance":{"amount":"84.21","currency":"USD"},
+                      "due_date":"2026-07-18","account":"12345-0"}"#;
+        let s = extract_summary(&q, out);
+        assert_eq!(s.balance, Some(84.21));
+        assert_eq!(s.due_date.as_deref(), Some("2026-07-18"));
+    }
+
+    #[test]
+    fn profile_summary_overrides_manifest_fields() {
+        // Stale manifest config (cents scaling, wrong paths) is ignored once
+        // the CLI emits the canonical DTO.
+        let q = query(
+            "json",
+            &["balance.cents"],
+            &["services.0.due_date"],
+            Some("cents"),
+        );
+        let out = r#"{"schema":"utility-summary/v1",
+                      "balance":{"amount":"84.21","currency":"USD"},
+                      "due_date":"2026-07-18"}"#;
+        let s = extract_summary(&q, out);
+        assert_eq!(s.balance, Some(84.21));
+        assert_eq!(s.due_date.as_deref(), Some("2026-07-18"));
+    }
+
+    #[test]
+    fn profile_summary_without_due_date() {
+        let q = query("json", &[], &[], None);
+        let out = r#"{"schema":"utility-summary/v1",
+                      "balance":{"amount":"0.00","currency":"USD"}}"#;
+        let s = extract_summary(&q, out);
+        assert_eq!(s.balance, Some(0.0));
+        assert_eq!(s.due_date, None);
+    }
+
+    #[test]
+    fn other_schemas_fall_through_to_manifest_fields() {
+        let q = query("json", &["balance.cents"], &["due_date"], Some("cents"));
+        let out =
+            r#"{"schema":"tojfl-summary/v1","balance":{"cents":8421},"due_date":"07/18/2026"}"#;
+        let s = extract_summary(&q, out);
+        assert_eq!(s.balance, Some(84.21));
+    }
+
+    #[test]
+    fn paged_envelope_items_fast_path() {
+        // items-path unset; the -list/v1 envelope finds records anyway, and
+        // Money objects scalarize so value-fields = ["amount"] works.
+        let s = series("json", "", "date", &["amount"], None);
+        let out = r#"{"schema":"statement-list/v1","items":[
+            {"id":"2026-06","date":"2026-06-15","amount":{"amount":"84.21","currency":"USD"}},
+            {"id":"2026-05","date":"2026-05-15","amount":{"amount":"79.00","currency":"USD"}}]}"#;
+        let pts = extract_series(&s, out);
+        assert_eq!(pts.len(), 2);
+        assert_eq!(pts[0].label, "2026-06-15");
+        assert_eq!(pts[0].value, 84.21);
+        assert_eq!(pts[1].value, 79.00);
+    }
+
+    #[test]
+    fn money_objects_scalarize_by_fields_not_shape() {
+        use serde_json::json;
+        assert_eq!(
+            json_scalar(&json!({"amount": "84.21", "currency": "USD"})),
+            "84.21"
+        );
+        // Additive DTO growth must not break detection…
+        assert_eq!(
+            json_scalar(&json!({"amount": "84.21", "currency": "USD", "note": "x"})),
+            "84.21"
+        );
+        // …while amount-without-currency is not money.
+        assert_eq!(
+            json_scalar(&json!({"amount": "1.00", "kind": "fee"})),
+            r#"{"amount":"1.00","kind":"fee"}"#
+        );
+    }
+
+    #[test]
+    fn paged_envelope_ignores_stale_cents_scale() {
+        // A manifest written for the pre-profile CLI (`amount.cents` +
+        // scale="cents") must still chart correctly against profile output:
+        // the fallback chain reaches `amount`, and the envelope suppresses
+        // the cents division.
+        let s = series(
+            "json",
+            "",
+            "date",
+            &["amount.cents", "amount"],
+            Some("cents"),
+        );
+        let out = r#"{"schema":"statement-list/v1","items":[
+            {"id":"1","date":"2026-06-15","amount":{"amount":"84.21","currency":"USD"}}]}"#;
+        let pts = extract_series(&s, out);
+        assert_eq!(pts.len(), 1);
+        assert_eq!(pts[0].value, 84.21);
+
+        // …while the same manifest against pre-profile output still scales.
+        let old = r#"[{"date":"06/15/2026","amount":{"cents":8421}}]"#;
+        let pts = extract_series(&s, old);
+        assert_eq!(pts[0].value, 84.21);
     }
 
     #[test]

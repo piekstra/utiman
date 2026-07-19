@@ -43,7 +43,9 @@ id = "bills"
 name = "Bill amounts"
 args = ["bills", "list", "--json"]
 label-field = "date"
-value-fields = ["amount.cents"]
+# `amount.cents` matches tojfl < 0.3.0; `amount` matches the utility/v1
+# statement-list envelope (>= 0.3.0), where scale is ignored automatically.
+value-fields = ["amount.cents", "amount"]
 unit = "usd"
 scale = "cents"
 chart = "bar"
