@@ -10,6 +10,7 @@ mod archive;
 mod check;
 mod dates;
 mod detect;
+mod export;
 mod extract;
 mod install;
 mod manifest;

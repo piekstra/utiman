@@ -52,6 +52,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/providers/{id}/doc/{docid}", get(download_document))
         .route("/api/providers/{id}", delete(delete_provider))
         .route("/api/install/{task}", get(install_status))
+        .route("/api/export", get(export_bundle))
         .route("/api/register", post(register_provider))
         .layer(middleware::from_fn(require_local_host))
         .with_state(app)
@@ -204,6 +205,25 @@ async fn payment_initiated(
     }
     crate::pending::record(&id, body.balance.unwrap_or(0.0));
     Json(json!({ "ok": true })).into_response()
+}
+
+/// Bundle all local records (balance history + archived series, as CSVs) into a
+/// single downloadable .zip.
+async fn export_bundle() -> Response {
+    let bytes = crate::export::build_bundle();
+    let t = crate::dates::today();
+    let filename = format!(
+        "utiman-export-{:04}-{:02}-{:02}.zip",
+        t.year, t.month, t.day
+    );
+    Response::builder()
+        .header(header::CONTENT_TYPE, "application/zip")
+        .header(
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{filename}\""),
+        )
+        .body(axum::body::Body::from(bytes))
+        .expect("valid response")
 }
 
 async fn snapshots_for(Path(id): Path<String>) -> Response {
