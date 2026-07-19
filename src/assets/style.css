@@ -698,7 +698,14 @@ footer {
 }
 
 /* ---------- daily reminder popover ---------- */
+#remind-toggle { position: relative; }
 #remind-toggle.on { color: var(--accent); }
+/* A dot (not color alone) marks the reminder as on. */
+#remind-toggle.on::after {
+  content: ""; position: absolute; top: 5px; right: 5px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent); border: 1.5px solid var(--page);
+}
 .remind-pop {
   position: fixed; z-index: 20;
   width: 300px; max-width: calc(100vw - 24px);

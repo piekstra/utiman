@@ -46,10 +46,13 @@ pub fn parse_time(s: &str) -> Result<(u32, u32)> {
 /// daily at the given time. Pure — the exe path and values are the only inputs.
 pub fn plist_xml(exe: &str, r: Reminder) -> String {
     // Log to the user's cache dir so a failed run leaves a breadcrumb.
-    let log = dirs::cache_dir()
+    let log_path = dirs::cache_dir()
         .unwrap_or_else(|| PathBuf::from("/tmp"))
         .join("utiman-remind.log");
-    let log = log.display();
+    // Escape XML metacharacters — a path with '&' (or '<'/'>') would otherwise
+    // produce a malformed plist that launchd silently refuses to load.
+    let exe = xml_escape(exe);
+    let log = xml_escape(&log_path.to_string_lossy());
     format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -78,6 +81,13 @@ pub fn plist_xml(exe: &str, r: Reminder) -> String {
         hour = r.hour,
         minute = r.minute,
     )
+}
+
+/// Escape the three XML metacharacters that matter inside a plist `<string>`.
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 /// Read the current schedule back out of an installed plist (best-effort, so
@@ -193,6 +203,21 @@ mod tests {
         assert!(xml.contains("<string>/usr/local/bin/utiman</string>"));
         assert!(xml.contains(&format!("<string>{LABEL}</string>")));
         assert_eq!(parse_status(&xml), Some(r));
+    }
+
+    #[test]
+    fn plist_escapes_xml_in_the_exe_path() {
+        // A path with an ampersand must not corrupt the plist XML.
+        let xml = plist_xml(
+            "/Users/a&b/utiman",
+            Reminder {
+                hour: 9,
+                minute: 0,
+                within: 5,
+            },
+        );
+        assert!(xml.contains("/Users/a&amp;b/utiman"));
+        assert!(!xml.contains("a&b"));
     }
 
     #[test]

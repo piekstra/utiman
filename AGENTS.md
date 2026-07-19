@@ -12,7 +12,7 @@ shells out to provider binaries described by TOML manifests.
 
 | Path | Responsibility |
 |------|----------------|
-| `src/main.rs` | clap CLI: `serve` (default), `list`, `register`, `check`, `self-update` |
+| `src/main.rs` | clap CLI: `serve` (default), `list`, `register`, `check`, `self-update`, `remind` |
 | `build.rs` | bakes `BUILD_TARGET` (target triple) for self-update asset selection |
 | `src/manifest.rs` | manifest schema, validation, builtin+user loading/merge |
 | `src/extract.rs` | balance/due-date extraction: JSON dot-paths, text labels, money parsing |

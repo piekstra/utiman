@@ -1369,6 +1369,16 @@ document.addEventListener("keydown", (ev) => {
 });
 
 // ---------- daily reminder (macOS launchd) ----------
+
+// Coerce the "notify within" field to the valid 1–60 range (browsers don't
+// enforce min/max on typed values). An out-of-range or empty entry clamps
+// rather than silently sending the falsy-triggered default — and reflect()
+// then writes the saved value back so the field shows exactly what took.
+function clampWithin(v) {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.min(60, Math.max(1, n)) : 5;
+}
+
 (function initReminders() {
   const btn = $("#remind-toggle");
   const pop = $("#remind-pop");
@@ -1425,7 +1435,7 @@ document.addEventListener("keydown", (ev) => {
       const r = await api("/api/reminders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ at: at.value, within: Number(within.value) || 5 }),
+        body: JSON.stringify({ at: at.value, within: clampWithin(within.value) }),
       });
       reflect(r.reminder);
       msg.textContent = "✓ On — you'll be notified daily.";
