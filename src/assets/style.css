@@ -214,6 +214,7 @@ main { max-width: 1080px; margin: 0 auto; padding: 26px 20px 60px; }
 }
 .hero-label { font-size: 13px; color: var(--ink-2); font-weight: 550; }
 .hero-value { font-size: 52px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.05; }
+.hero-caveat { font-size: 12.5px; color: var(--warning); margin-top: 2px; }
 .stats-side { display: flex; gap: 26px; flex-wrap: wrap; }
 .stat { min-width: 120px; }
 .stat .stat-label { font-size: 12px; color: var(--ink-muted); font-weight: 550; }
@@ -240,6 +241,15 @@ main { max-width: 1080px; margin: 0 auto; padding: 26px 20px 60px; }
 .card.clickable { cursor: pointer; }
 .card.clickable:hover { box-shadow: var(--shadow-2); transform: translateY(-2px); }
 .card-top { display: flex; align-items: center; gap: 11px; }
+.card-refresh { padding: 5px; color: var(--ink-muted); opacity: 0; transition: opacity 0.15s ease, color 0.15s ease; }
+.card-refresh .ic { width: 15px; height: 15px; }
+.card.clickable:hover .card-refresh { opacity: 1; }
+/* Keyboard users must see the button when it's focused, not just on hover. */
+.card-refresh:focus-visible { opacity: 1; }
+.card-refresh:hover { color: var(--ink); }
+.card-refresh.busy { opacity: 1; }
+.card-refresh.busy .ic { animation: spin 0.9s linear infinite; }
+.ic.spin { animation: spin 0.9s linear infinite; }
 .card-title { flex: 1; min-width: 0; }
 .card-name { font-weight: 650; font-size: 15px; letter-spacing: -0.01em; }
 .card-sub { font-size: 12px; color: var(--ink-muted); }
