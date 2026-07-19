@@ -101,6 +101,69 @@ fn first_match(s: &str, seps: &[char], build: impl Fn(i64, i64, i64) -> Date) ->
     None
 }
 
+/// Parse a series period *label* into a date for ordering and seasonal
+/// comparison. Handles the numeric forms `parse_due` does (ISO `2026-06-26`,
+/// US `6/16/2026`) plus the month forms CLIs use for cycles: `Jun 2026`,
+/// `June 2026`, and `2026-06` (day defaults to 1). Returns None if no date is
+/// recognizable.
+pub fn parse_label(s: &str) -> Option<Date> {
+    if let Some(d) = parse_due(s) {
+        return Some(d);
+    }
+    // Month name + year, e.g. "Jun 2026" / "June 2026".
+    let lower = s.to_lowercase();
+    for (i, name) in MONTHS.iter().enumerate() {
+        if lower.contains(name) {
+            if let Some(year) = four_digit_year(&lower) {
+                return Some(Date {
+                    year,
+                    month: (i + 1) as u32,
+                    day: 1,
+                });
+            }
+        }
+    }
+    // Year-month, e.g. "2026-06".
+    let nums: Vec<i64> = s
+        .split(|c: char| !c.is_ascii_digit())
+        .filter_map(|t| t.parse().ok())
+        .collect();
+    if let [y, m] = nums[..] {
+        if (1970..=3000).contains(&y) && (1..=12).contains(&m) {
+            return Some(Date {
+                year: y,
+                month: m as u32,
+                day: 1,
+            });
+        }
+    }
+    None
+}
+
+/// Lowercase three-letter month prefixes, index 0 = January.
+const MONTHS: [&str; 12] = [
+    "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+];
+
+fn four_digit_year(s: &str) -> Option<i64> {
+    // Scan the raw bytes for a run of four ASCII digits. Testing the bytes (not
+    // slicing the &str) keeps this panic-free on labels with multi-byte UTF-8:
+    // ASCII digits are single-byte, so a window that's all digits never crosses
+    // a char boundary, and any window touching a multi-byte char is skipped.
+    let bytes = s.as_bytes();
+    for i in 0..bytes.len().saturating_sub(3) {
+        if bytes[i..i + 4].iter().all(u8::is_ascii_digit) {
+            let y = bytes[i..i + 4]
+                .iter()
+                .fold(0i64, |acc, b| acc * 10 + i64::from(b - b'0'));
+            if (1970..=3000).contains(&y) {
+                return Some(y);
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -162,6 +225,67 @@ mod tests {
         );
         assert_eq!(parse_due("paid in full"), None);
         assert_eq!(parse_due("13/40/2026"), None); // out of range
+    }
+
+    #[test]
+    fn parse_label_month_and_yearmonth() {
+        assert_eq!(
+            parse_label("Jun 2026"),
+            Some(Date {
+                year: 2026,
+                month: 6,
+                day: 1
+            })
+        );
+        assert_eq!(
+            parse_label("June 2026"),
+            Some(Date {
+                year: 2026,
+                month: 6,
+                day: 1
+            })
+        );
+        assert_eq!(
+            parse_label("2026-06"),
+            Some(Date {
+                year: 2026,
+                month: 6,
+                day: 1
+            })
+        );
+        // Numeric forms still work through parse_due.
+        assert_eq!(
+            parse_label("2026-06-26"),
+            Some(Date {
+                year: 2026,
+                month: 6,
+                day: 26
+            })
+        );
+        assert_eq!(
+            parse_label("06/16/2026"),
+            Some(Date {
+                year: 2026,
+                month: 6,
+                day: 16
+            })
+        );
+        assert_eq!(parse_label("period 12"), None);
+    }
+
+    #[test]
+    fn parse_label_non_ascii_does_not_panic() {
+        // Multi-byte chars must not panic four_digit_year's byte scan.
+        assert_eq!(
+            parse_label("Facturación Jun 2026"),
+            Some(Date {
+                year: 2026,
+                month: 6,
+                day: 1
+            })
+        );
+        // A non-ASCII label with no recognizable date is simply unmatched.
+        assert_eq!(parse_label("período eléctrico"), None);
     }
 
     #[test]

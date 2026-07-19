@@ -179,6 +179,13 @@ header row names the fields (matched case-insensitively, so `label-field =
 "Month"` finds a `MONTH` column). Points are assumed newest-first, matching
 how the CLIs print.
 
+utiman also keeps a **local series archive**: every fetched series is
+merged into `~/.local/share/utiman/series/<provider>__<series>.jsonl`
+(upsert by period label), so charts extend past the CLI's own window the
+longer utiman runs — and insight chips can compare a period to the **same
+period last year** (the right baseline for seasonal utilities), falling
+back to the prior period until a year of history accrues.
+
 Separately from manifest series, utiman records its own **balance snapshot**
 on every successful summary (to `~/.local/share/utiman/history/<id>.jsonl`),
 so every provider gets a balance-over-time chart and a card sparkline even
