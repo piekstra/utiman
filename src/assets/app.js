@@ -493,15 +493,16 @@ function renderCards() {
     const top = el("div", { class: "card-top" });
     const title = el("div", { class: "card-title" });
     const checked = state.checkedAt.get(p.id);
-    title.append(
-      el("div", { class: "card-name" }, p.name),
-      el("div", { class: "card-sub" },
-        checked ? `${p.kind} · checked ${relTime(checked)}` : p.kind)
-    );
-    top.append(badge(p.kind), title);
-
+    // Name gets the full row; the kind/updated meta and the auth chip sit on a
+    // second line so a long name (e.g. "Town of Jupiter Water") isn't squeezed
+    // into wrapping by the chip, which used to shove the value out of alignment.
+    const meta = el("div", { class: "card-meta" });
+    meta.append(el("span", { class: "card-sub" },
+      checked ? `${p.kind} · ${relTime(checked)}` : p.kind));
     const chip = authChip(p);
-    if (chip) top.append(chip);
+    if (chip) meta.append(chip);
+    title.append(el("div", { class: "card-name" }, p.name), meta);
+    top.append(badge(p.kind), title);
 
     // Per-card refresh: re-hit just this provider, so the full Refresh (which
     // re-queries every portal) isn't the only way to update one — and it's
@@ -533,13 +534,16 @@ function renderCards() {
       card.append(el("div", { class: "card-value" },
         s.balance == null ? "—" : usd.format(s.balance)));
       const due = el("div", { class: "due-row" });
-      if (s.due_date) {
-        const cleaned = cleanDueDate(s.due_date);
+      // Only show "Due X" when the portal actually gave a parseable date —
+      // some (e.g. FPL) return free text like "View Balance Details below",
+      // which we must not render as if it were a date.
+      const cleaned = s.due_date ? cleanDueDate(s.due_date) : null;
+      if (cleaned && daysUntil(cleaned) != null) {
         due.append(`Due ${cleaned}`);
         const dp = duePill(cleaned);
         if (dp) due.append(dp);
       } else {
-        due.append("No due date reported");
+        due.append("No due date");
       }
       card.append(due);
       // Bill shock: the latest bill is unusually high vs this account's history.
