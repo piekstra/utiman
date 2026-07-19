@@ -62,24 +62,51 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Update utiman to the latest release from GitHub (like the CLIs it manages).
+    SelfUpdate(pk_cli_selfupdate::SelfUpdateArgs),
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let cli = Cli::parse();
-    match cli.command.unwrap_or(Command::Serve) {
-        Command::Serve => serve(cli.port, !cli.no_open).await,
-        Command::List => list().await,
-        Command::Register { file } => register(&file),
-        Command::Check {
-            within,
-            notify,
-            json,
-        } => {
-            let code = check::run(within, notify, json).await?;
-            std::process::exit(code);
-        }
+    let command = cli.command.unwrap_or(Command::Serve);
+
+    // self-update drives a blocking HTTP client that panics if its internal
+    // runtime is dropped inside a tokio context, so run it before (outside)
+    // the async runtime. Every other command needs tokio.
+    if let Command::SelfUpdate(args) = &command {
+        return self_update(args);
     }
+
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(async move {
+        match command {
+            Command::Serve => serve(cli.port, !cli.no_open).await,
+            Command::List => list().await,
+            Command::Register { file } => register(&file),
+            Command::Check {
+                within,
+                notify,
+                json,
+            } => {
+                let code = check::run(within, notify, json).await?;
+                std::process::exit(code);
+            }
+            Command::SelfUpdate(_) => unreachable!("handled before the runtime"),
+        }
+    })
+}
+
+/// Update the running binary from utiman's GitHub releases, via the family
+/// updater — the same mechanism the managed CLIs use for `self-update`.
+fn self_update(args: &pk_cli_selfupdate::SelfUpdateArgs) -> Result<()> {
+    pk_cli_selfupdate::Updater {
+        repo: "piekstra/utiman".into(),
+        binary: "utiman".into(),
+        target: env!("BUILD_TARGET").into(),
+        current: env!("CARGO_PKG_VERSION").into(),
+    }
+    .run(args, args.json, false)
+    .map_err(anyhow::Error::new)
 }
 
 async fn serve(port: u16, open_browser: bool) -> Result<()> {
