@@ -35,22 +35,26 @@ pub fn build_bundle() -> Vec<u8> {
 fn balances_csv() -> String {
     let mut out = String::from("provider,date,unix_ts,balance,due_date\n");
     for p in load_providers() {
-        let id = &p.manifest.id;
-        for s in crate::snapshots::read(id) {
-            let d = crate::dates::from_unix(s.ts as i64);
-            out.push_str(&format!(
-                "{},{:04}-{:02}-{:02},{},{},{}\n",
-                field(id),
-                d.year,
-                d.month,
-                d.day,
-                s.ts,
-                s.balance,
-                field(s.due_date.as_deref().unwrap_or("")),
-            ));
+        for s in crate::snapshots::read(&p.manifest.id) {
+            out.push_str(&balance_row(&p.manifest.id, &s));
         }
     }
     out
+}
+
+/// One `balances.csv` data row (pure — the composition/formatting under test).
+fn balance_row(id: &str, s: &crate::snapshots::Snapshot) -> String {
+    let d = crate::dates::from_unix(s.ts as i64);
+    format!(
+        "{},{:04}-{:02}-{:02},{},{},{}\n",
+        field(id),
+        d.year,
+        d.month,
+        d.day,
+        s.ts,
+        s.balance,
+        field(s.due_date.as_deref().unwrap_or("")),
+    )
 }
 
 /// One (filename-stem, CSV) per archived series file on disk.
@@ -214,6 +218,31 @@ mod tests {
         assert_eq!(field("electric"), "electric");
         assert_eq!(field("a,b"), "\"a,b\"");
         assert_eq!(field("say \"hi\""), "\"say \"\"hi\"\"\"");
+    }
+
+    #[test]
+    fn balance_row_formats_date_money_and_escapes() {
+        use crate::snapshots::Snapshot;
+        // ts 0 = 1970-01-01 UTC.
+        let plain = balance_row(
+            "fpl",
+            &Snapshot {
+                ts: 0,
+                balance: 42.5,
+                due_date: Some("8/5/2026".into()),
+            },
+        );
+        assert_eq!(plain, "fpl,1970-01-01,0,42.5,8/5/2026\n");
+        // A due date with a comma is CSV-quoted; a missing one is empty.
+        let comma = balance_row(
+            "x",
+            &Snapshot {
+                ts: 0,
+                balance: -3.0,
+                due_date: Some("July 11, 2026".into()),
+            },
+        );
+        assert_eq!(comma, "x,1970-01-01,0,-3,\"July 11, 2026\"\n");
     }
 
     #[test]
