@@ -279,7 +279,14 @@ function seriesStats(points) {
     }
     seasonalRef = best;
   }
-  const compare = compareTo(latest, seasonalRef, true) || compareTo(latest, prev, false);
+  // Prefer the seasonal comparison only when it yields a usable percentage —
+  // a zero-valued same-period-last-year reference makes pct null, and falling
+  // back on object truthiness alone would then suppress a valid prior-period
+  // delta. Fall back on pct == null instead.
+  const seasonalCmp = compareTo(latest, seasonalRef, true);
+  const compare = seasonalCmp && seasonalCmp.pct != null
+    ? seasonalCmp
+    : compareTo(latest, prev, false);
 
   let streak = 0;
   let dir = 0;
