@@ -50,6 +50,16 @@ cargo install --git https://github.com/piekstra/utiman
 utiman                       # serves http://127.0.0.1:7877 and opens it
 ```
 
+Or grab a prebuilt binary from the
+[Releases](https://github.com/piekstra/utiman/releases) page. However you
+installed it, **`utiman self-update`** upgrades it in place from the latest
+release — the same mechanism the CLIs it manages use:
+
+```sh
+utiman self-update --check   # is a newer version out?
+utiman self-update           # download + replace the binary
+```
+
 Provider CLIs can be installed from the dashboard's catalog (it runs
 `cargo install` for you and streams the log), or however you prefer — utiman
 detects anything already on your `PATH`.
@@ -80,6 +90,7 @@ utiman --port 9000 --no-open  # serve only
 utiman list                   # providers + installed/version status
 utiman register acme.toml     # add a provider manifest
 utiman check                  # what's due, and how soon
+utiman self-update            # upgrade utiman in place
 ```
 
 ### Due-date checks & reminders
