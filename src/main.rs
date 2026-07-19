@@ -12,6 +12,7 @@ mod detect;
 mod extract;
 mod install;
 mod manifest;
+mod pending;
 mod runner;
 mod server;
 mod snapshots;

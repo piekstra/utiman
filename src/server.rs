@@ -38,6 +38,10 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/providers/{id}/summary", get(provider_summary))
         .route("/api/providers/{id}/op/{opid}", post(run_operation))
         .route("/api/providers/{id}/pay", post(open_pay))
+        .route(
+            "/api/providers/{id}/payment-initiated",
+            post(payment_initiated),
+        )
         .route("/api/providers/{id}/install", post(start_install))
         .route("/api/providers/{id}/update-check", post(update_check))
         .route("/api/providers/{id}/auth-status", get(auth_status))
@@ -167,13 +171,37 @@ async fn provider_summary(Path(id): Path<String>) -> Response {
     if let Some(balance) = fields.balance {
         crate::snapshots::record(&id, balance, fields.due_date.as_deref());
     }
+    // A payment may be in flight (accepted but not yet reflected in the
+    // portal balance). is_pending self-clears once the balance drops.
+    let pending = crate::pending::is_pending(&id, fields.balance);
     Json(json!({
         "state": "ok",
         "balance": fields.balance,
         "due_date": fields.due_date,
+        "pending": pending,
         "raw": out.stdout,
     }))
     .into_response()
+}
+
+#[derive(Deserialize)]
+struct PaymentInitiatedBody {
+    /// Balance shown when the user started paying, so the marker can clear
+    /// once the live balance drops below it.
+    balance: Option<f64>,
+}
+
+/// Record that the user just initiated a payment, so the card can show a
+/// "payment pending" state until the balance posts. Non-secret marker.
+async fn payment_initiated(
+    Path(id): Path<String>,
+    Json(body): Json<PaymentInitiatedBody>,
+) -> Response {
+    if find_provider(&id).is_none() {
+        return err(StatusCode::NOT_FOUND, format!("no provider {id}"));
+    }
+    crate::pending::record(&id, body.balance.unwrap_or(0.0));
+    Json(json!({ "ok": true })).into_response()
 }
 
 async fn snapshots_for(Path(id): Path<String>) -> Response {
