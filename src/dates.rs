@@ -44,6 +44,11 @@ pub fn today() -> Date {
     from_days_since_epoch(secs.div_euclid(86_400))
 }
 
+/// UTC calendar date for a Unix timestamp (seconds) — for export/formatting.
+pub fn from_unix(secs: i64) -> Date {
+    from_days_since_epoch(secs.div_euclid(86_400))
+}
+
 /// Inverse of `days_from_epoch` — civil date from a day count.
 fn from_days_since_epoch(z: i64) -> Date {
     let z = z + 719_468;
