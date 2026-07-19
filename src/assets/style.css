@@ -755,7 +755,8 @@ footer {
   body { background: #fff; color: #111; }
   .appbar, .load-bar, #toasts, .report-bar button, footer { display: none !important; }
   main { max-width: none; padding: 0; }
-  #view-report { display: block !important; }
+  /* Print whatever section is on screen — don't force the (maybe-unpopulated)
+     Report view into a native Cmd/Ctrl+P from another tab. */
   .report-table th, .report-table td { padding: 6px 12px 6px 0; }
   .chart-box { break-inside: avoid; box-shadow: none; border-color: #ccc; }
   a[href]::after { content: ""; } /* don't append URLs */
