@@ -137,6 +137,7 @@ function summaryProviders() {
 function renderDashboard() {
   renderStats();
   renderHighlights();
+  renderTimeline();
   renderCards();
   const any = summaryProviders().length > 0;
   // While a load is in flight, keep the stats strip up (it carries the loading
@@ -253,6 +254,89 @@ function renderHighlights() {
   // Collapse the box entirely when there's nothing to show, so it doesn't
   // reserve blank vertical space before series data has streamed in.
   box.hidden = count === 0;
+}
+
+// Bills we can actually place on a calendar: read OK, a positive balance owed,
+// and a parseable due date. Soonest-first, overdue included (negative days).
+function upcomingBills() {
+  const out = [];
+  for (const p of summaryProviders()) {
+    const s = state.summaries.get(p.id);
+    if (!s || s.state !== "ok" || !(s.balance > 0) || !s.due_date) continue;
+    const due = cleanDueDate(s.due_date);
+    const days = daysUntil(due);
+    if (days == null) continue;
+    out.push({ id: p.id, name: p.name, kind: p.kind, balance: s.balance, due, days });
+  }
+  return out.sort((a, b) => a.days - b.days);
+}
+
+// A horizontal "what's coming up" timeline: each dated bill as a marker placed
+// by its due date, colored by urgency. Needs 2+ dated bills to beat the single
+// "Next due" stat; otherwise it stays hidden.
+function renderTimeline() {
+  let box = $("#timeline");
+  if (!box) {
+    box = el("div", { class: "timeline", id: "timeline" });
+    ($("#highlights") || $("#stats-strip")).after(box);
+  }
+  const bills = upcomingBills();
+  if (bills.length < 2) {
+    box.replaceChildren();
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  box.replaceChildren();
+
+  // Window: today (0) on the left — or the most-overdue bill if earlier — out to
+  // the furthest due date, but at least a 30-day runway so near bills aren't
+  // crammed against the edge.
+  const minDay = Math.min(0, ...bills.map((b) => b.days));
+  const maxDay = Math.max(30, ...bills.map((b) => b.days));
+  const span = maxDay - minDay || 1;
+  // Keep every marker inside a 6%–94% band so a centered label at either end
+  // still has room and can't push the page into a horizontal scroll.
+  const frac = (d) => 6 + ((d - minDay) / span) * 88;
+  const urgencyOf = (d) => (d < 0 ? "crit" : d <= 7 ? "warn" : "ok");
+  const whenLabel = (d) => (d < 0 ? `overdue ${-d}d` : d === 0 ? "due today" : `in ${d}d`);
+
+  const total = bills.reduce((sum, b) => sum + b.balance, 0);
+  box.append(el("div", { class: "timeline-head" },
+    el("strong", {}, "Upcoming bills"),
+    el("span", { class: "timeline-sub" },
+      `${bills.length} bills · ${usd.format(total)} over the next ${maxDay} days`)));
+
+  const track = el("div", { class: "timeline-track" });
+  track.append(el("div", { class: "tl-line" }));
+
+  // "Today" tick.
+  const today = el("div", { class: "tl-today" });
+  today.style.left = `${frac(0)}%`;
+  today.append(el("span", { class: "tl-today-label" }, "Today"));
+  track.append(today);
+
+  // Stagger labels above/below the line so close dates don't collide.
+  bills.forEach((b, i) => {
+    const marker = el("div", {
+      class: `tl-bill ${urgencyOf(b.days)} ${i % 2 ? "below" : "above"}`,
+      role: "button", tabindex: "0",
+      title: `${b.name}: ${usd.format(b.balance)} due ${b.due} (${whenLabel(b.days)})`,
+    });
+    marker.style.left = `${frac(b.days)}%`;
+    marker.append(
+      el("div", { class: "tl-label" },
+        el("span", { class: "tl-amt" }, usd.format(b.balance)),
+        el("span", { class: "tl-who" }, `${b.name} · ${whenLabel(b.days)}`)),
+      el("div", { class: "tl-dot" }));
+    const open = () => { location.hash = `#/p/${b.id}`; };
+    marker.addEventListener("click", open);
+    marker.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); }
+    });
+    track.append(marker);
+  });
+  box.append(track);
 }
 
 function statusLine(cls, iconName, text) {
