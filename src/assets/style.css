@@ -214,6 +214,14 @@ main { max-width: 1080px; margin: 0 auto; padding: 26px 20px 60px; }
 }
 .hero-label { font-size: 13px; color: var(--ink-2); font-weight: 550; }
 .hero-value { font-size: 52px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.05; }
+/* Before any balance is in, the value is a shimmer block, not a stray "$0.00". */
+.hero-value.loading {
+  width: 210px; max-width: 55vw; height: 50px; border-radius: 12px;
+  background: linear-gradient(90deg, var(--chip) 25%, var(--grid) 50%, var(--chip) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+.hero-progress { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; }
 .hero-caveat { font-size: 12.5px; color: var(--warning); margin-top: 2px; }
 .stats-side { display: flex; gap: 26px; flex-wrap: wrap; }
 .stat { min-width: 120px; }
@@ -287,6 +295,8 @@ main { max-width: 1080px; margin: 0 auto; padding: 26px 20px 60px; }
 .card-status.warn { color: var(--warning); }
 .card-status.crit { color: var(--critical); }
 .card-status.good { color: var(--good); }
+.card-status.checking { color: var(--ink-muted); }
+.card-status.checking .ic { width: 14px; height: 14px; }
 .card-status.pending {
   color: var(--accent);
   background: var(--accent-soft);
@@ -339,6 +349,26 @@ svg.sparkline { width: 120px; height: 30px; }
   animation: shimmer 1.4s infinite;
 }
 @keyframes shimmer { to { background-position: -200% 0; } }
+
+/* A card still fetching its summary: a value-sized shimmer + a "Checking…" line. */
+.card-loading { display: flex; flex-direction: column; gap: 9px; }
+.skel-value { height: 30px; width: 58%; border-radius: 8px; }
+
+/* Indeterminate progress bar under the app bar during a full load/refresh. */
+.load-bar { position: relative; height: 3px; overflow: hidden; background: var(--chip); }
+.load-bar::before {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 35%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: load-slide 1.15s ease-in-out infinite;
+}
+@keyframes load-slide {
+  from { transform: translateX(-120%); }
+  to   { transform: translateX(400%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .load-bar::before { animation-duration: 2.4s; }
+  .skeleton, .hero-value.loading { animation-duration: 2.6s; }
+}
 
 .empty-state {
   text-align: center;
