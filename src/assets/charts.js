@@ -357,7 +357,10 @@ function renderSparkline(snapshots) {
 // Provider kind → chart hue, reusing the same CSS custom props as the badges so
 // the rollup's stacked segments match each provider's identity color.
 function kindHue(kind) {
-  const known = ["electric", "water", "sewer", "gas", "internet", "trash"];
+  // Only kinds with a defined --kind-* token; "trash" (and anything unknown)
+  // falls back to --kind-other, matching the badge KIND map in app.js. Using
+  // an undefined var would resolve to the SVG fill initial value (black).
+  const known = ["electric", "water", "sewer", "gas", "internet"];
   return `var(--kind-${known.includes(kind) ? kind : "other"})`;
 }
 

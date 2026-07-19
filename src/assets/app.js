@@ -310,25 +310,32 @@ function monthLabel(key) {
   return `${M3[Number(m) - 1]} ${y}`;
 }
 
-// Sum every provider's dollar-denominated series (bills / payments — units in
-// kWh or gallons are skipped) by calendar month, into stacked per-provider
-// segments. The cross-provider view the per-account charts can't give.
+// Aggregate each provider's dollar-denominated history by calendar month into
+// stacked per-provider segments — the cross-provider "money out for utilities"
+// view the per-account charts can't give. One series per provider (a billed
+// amount is preferred over a payments series so semantics don't mix within a
+// provider, and two usd series can never double-count); kWh/gallon series are
+// skipped. A provider that only reports payments (e.g. a quarterly sewer bill)
+// still contributes its best-available money signal rather than being dropped.
 function spendRollup() {
   const provMap = new Map();          // id -> { id, name, kind }
   const byMonth = new Map();          // "YYYY-MM" -> Map(id -> summed value)
+  // Prefer a billed-cost series over a payments one when a provider has both.
+  const isCost = (s) => /bill|cost|charge|amount/i.test(`${s.id} ${s.name || ""}`);
   for (const p of summaryProviders()) {
-    for (const s of p.series || []) {
-      const r = state.series.get(`${p.id}/${s.id}`);
-      if (!r?.ok || r.unit !== "usd") continue;
-      provMap.set(p.id, { id: p.id, name: p.name, kind: p.kind });
-      for (const pt of r.points) {
-        const d = labelToDate(pt.label);
-        if (!d) continue;
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-        if (!byMonth.has(key)) byMonth.set(key, new Map());
-        const mm = byMonth.get(key);
-        mm.set(p.id, (mm.get(p.id) || 0) + Math.abs(pt.value));
-      }
+    const usd = (p.series || [])
+      .map((s) => ({ s, r: state.series.get(`${p.id}/${s.id}`) }))
+      .filter((x) => x.r?.ok && x.r.unit === "usd");
+    if (!usd.length) continue;
+    const chosen = usd.find((x) => isCost(x.s)) || usd[0];
+    provMap.set(p.id, { id: p.id, name: p.name, kind: p.kind });
+    for (const pt of chosen.r.points) {
+      const d = labelToDate(pt.label);
+      if (!d) continue;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (!byMonth.has(key)) byMonth.set(key, new Map());
+      const mm = byMonth.get(key);
+      mm.set(p.id, (mm.get(p.id) || 0) + Math.abs(pt.value));
     }
   }
   const providers = [...provMap.values()];
