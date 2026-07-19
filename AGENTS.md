@@ -22,7 +22,8 @@ shells out to provider binaries described by TOML manifests.
 | `src/snapshots.rs` | local balance history (`~/.local/share/utiman/history/*.jsonl`) |
 | `src/archive.rs` | local series archive (`~/.local/share/utiman/series/*.jsonl`) so charts outlive the CLI window |
 | `src/summary.rs` | shared "run summary → balance + due" helper (server + `check`) |
-| `src/check.rs` | `utiman check`: due-date report, urgency triage, macOS notify |
+| `src/check.rs` | `utiman check`: due-date report, urgency triage, macOS notify; `--anomalies` bill-shock report |
+| `src/anomaly.rs` | flags an unusually-high latest bill (>40% over the prior-periods median) |
 | `src/dates.rs` | dependency-free date parsing (ISO/US dates + cycle labels like `Jun 2026` / `2026-06` via `parse_label`) + days-from-today math |
 | `src/server.rs` | axum routes, Host-header guard, API handlers |
 | `src/assets/` | embedded frontend (index.html / app.js / charts.js / style.css) |
