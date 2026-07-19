@@ -323,11 +323,13 @@ function spendRollup() {
   // Prefer a billed-cost series over a payments one when a provider has both.
   const isCost = (s) => /bill|cost|charge|amount/i.test(`${s.id} ${s.name || ""}`);
   for (const p of summaryProviders()) {
-    const usd = (p.series || [])
+    // (named usdSeries, not usd, so it can't shadow the module-level currency
+    // formatter and turn a future usd.format(...) into a runtime error.)
+    const usdSeries = (p.series || [])
       .map((s) => ({ s, r: state.series.get(`${p.id}/${s.id}`) }))
       .filter((x) => x.r?.ok && x.r.unit === "usd");
-    if (!usd.length) continue;
-    const chosen = usd.find((x) => isCost(x.s)) || usd[0];
+    if (!usdSeries.length) continue;
+    const chosen = usdSeries.find((x) => isCost(x.s)) || usdSeries[0];
     provMap.set(p.id, { id: p.id, name: p.name, kind: p.kind });
     for (const pt of chosen.r.points) {
       const d = labelToDate(pt.label);
@@ -335,7 +337,9 @@ function spendRollup() {
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       if (!byMonth.has(key)) byMonth.set(key, new Map());
       const mm = byMonth.get(key);
-      mm.set(p.id, (mm.get(p.id) || 0) + Math.abs(pt.value));
+      // Count charges only: a credit/refund (negative) is money back, not
+      // spend — clamp to 0 so it never inflates the total the way abs() would.
+      mm.set(p.id, (mm.get(p.id) || 0) + Math.max(0, pt.value));
     }
   }
   const providers = [...provMap.values()];
