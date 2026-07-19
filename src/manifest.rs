@@ -159,6 +159,23 @@ pub struct Query {
     pub scale: Option<String>,
 }
 
+/// Accept a bare string (the historical form) or an array of strings.
+fn string_or_seq<'de, D>(de: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        One(String),
+        Many(Vec<String>),
+    }
+    Ok(match OneOrMany::deserialize(de)? {
+        OneOrMany::One(s) => vec![s],
+        OneOrMany::Many(v) => v,
+    })
+}
+
 fn default_format() -> String {
     "json".into()
 }
@@ -204,8 +221,12 @@ pub struct Series {
     /// Ignored for format = "table".
     #[serde(default)]
     pub items_path: String,
-    /// Field holding each record's label (a period or date string).
-    pub label_field: String,
+    /// Field(s) holding each record's label (a period or date string). A
+    /// plain string or a fallback chain tried in order — chains let one
+    /// manifest span CLI versions that renamed the field (lrfl < 0.6.0
+    /// `payment_date` vs the utility/v1 profile's `date`).
+    #[serde(deserialize_with = "string_or_seq")]
+    pub label_field: Vec<String>,
     /// Candidate fields for the value, tried in order.
     pub value_fields: Vec<String>,
     /// Display unit: "usd" formats as money; anything else is shown as-is

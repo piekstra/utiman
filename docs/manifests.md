@@ -68,7 +68,8 @@ format = "json"                      # "json" (default) or "table" (pipe-table t
 # automatically: records are read from `items`, and Money-object values
 # resolve by their decimal amount (value-fields = ["amount"] just works).
 items-path = ""                      # dot-path to the record array ("" = JSON root)
-label-field = "period"               # each record's x label
+label-field = "period"               # each record's x label; also accepts a
+                                     # fallback chain, e.g. ["payment_date", "date"]
 value-fields = ["quantity"]          # fallbacks, tried in order
 unit = "gallons"                     # "usd" formats as money; else shown as-is
 # scale = "cents"                    # divide values by 100 (ignored for -list/v1 envelopes)
