@@ -53,6 +53,10 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/providers/{id}", delete(delete_provider))
         .route("/api/install/{task}", get(install_status))
         .route("/api/export", get(export_bundle))
+        .route(
+            "/api/reminders",
+            get(get_reminder).post(set_reminder).delete(clear_reminder),
+        )
         .route("/api/register", post(register_provider))
         .layer(middleware::from_fn(require_local_host))
         .with_state(app)
@@ -224,6 +228,49 @@ async fn export_bundle() -> Response {
         )
         .body(axum::body::Body::from(bytes))
         .expect("valid response")
+}
+
+/// Current daily-reminder status (+ host OS, since reminders are macOS-only).
+async fn get_reminder() -> Response {
+    let reminder = crate::remind::status();
+    Json(json!({
+        "os": std::env::consts::OS,
+        "installed": reminder.is_some(),
+        "reminder": reminder,
+    }))
+    .into_response()
+}
+
+#[derive(Deserialize)]
+struct SetReminderBody {
+    /// HH:MM (24-hour).
+    at: String,
+    within: Option<i64>,
+}
+
+/// Install (or replace) the daily reminder from the dashboard.
+async fn set_reminder(Json(body): Json<SetReminderBody>) -> Response {
+    let (hour, minute) = match crate::remind::parse_time(&body.at) {
+        Ok(t) => t,
+        Err(e) => return err(StatusCode::BAD_REQUEST, e.to_string()),
+    };
+    let reminder = crate::remind::Reminder {
+        hour,
+        minute,
+        within: body.within.unwrap_or(5),
+    };
+    match crate::remind::install(reminder) {
+        Ok(()) => Json(json!({ "ok": true, "reminder": reminder })).into_response(),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+/// Remove the daily reminder.
+async fn clear_reminder() -> Response {
+    match crate::remind::uninstall() {
+        Ok(()) => Json(json!({ "ok": true })).into_response(),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
 }
 
 async fn snapshots_for(Path(id): Path<String>) -> Response {

@@ -15,6 +15,7 @@ mod extract;
 mod install;
 mod manifest;
 mod pending;
+mod remind;
 mod runner;
 mod server;
 mod snapshots;
@@ -70,6 +71,28 @@ enum Command {
     },
     /// Update utiman to the latest release from GitHub (like the CLIs it manages).
     SelfUpdate(pk_cli_selfupdate::SelfUpdateArgs),
+    /// Manage a daily bill reminder (a macOS launchd agent running `check --notify`).
+    Remind {
+        #[command(subcommand)]
+        action: RemindAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum RemindAction {
+    /// Install (or replace) the daily reminder.
+    Install {
+        /// Time of day to check, HH:MM (24-hour).
+        #[arg(long, default_value = "09:00")]
+        at: String,
+        /// Days-ahead window counted as "due soon".
+        #[arg(long, default_value_t = 5)]
+        within: i64,
+    },
+    /// Remove the daily reminder.
+    Uninstall,
+    /// Show whether a reminder is installed and when it runs.
+    Status,
 }
 
 fn main() -> Result<()> {
@@ -98,6 +121,7 @@ fn main() -> Result<()> {
                 let code = check::run(within, notify, json, anomalies).await?;
                 std::process::exit(code);
             }
+            Command::Remind { action } => remind_cmd(action),
             Command::SelfUpdate(_) => unreachable!("handled before the runtime"),
         }
     })
@@ -160,5 +184,35 @@ fn register(file: &PathBuf) -> Result<()> {
     let dest = dir.join(format!("{}.toml", m.id));
     std::fs::write(&dest, &text)?;
     println!("registered {} -> {}", m.id, dest.display());
+    Ok(())
+}
+
+fn remind_cmd(action: RemindAction) -> Result<()> {
+    match action {
+        RemindAction::Install { at, within } => {
+            let (hour, minute) = remind::parse_time(&at)?;
+            remind::install(remind::Reminder {
+                hour,
+                minute,
+                within,
+            })?;
+            println!(
+                "Reminder on — utiman will check daily at {at} and notify about bills due within {within} days."
+            );
+        }
+        RemindAction::Uninstall => {
+            remind::uninstall()?;
+            println!("Reminder removed.");
+        }
+        RemindAction::Status => match remind::status() {
+            Some(r) => println!(
+                "Reminder on — daily at {:02}:{:02}, notifying about bills due within {} days.",
+                r.hour, r.minute, r.within
+            ),
+            None => {
+                println!("No reminder installed. Set one with: utiman remind install --at 09:00")
+            }
+        },
+    }
     Ok(())
 }

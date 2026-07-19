@@ -696,3 +696,36 @@ footer {
   *, *::before, *::after { transition: none !important; animation: none !important; }
   html { scroll-behavior: auto; }
 }
+
+/* ---------- daily reminder popover ---------- */
+#remind-toggle { position: relative; }
+#remind-toggle.on { color: var(--accent); }
+/* A dot (not color alone) marks the reminder as on. */
+#remind-toggle.on::after {
+  content: ""; position: absolute; top: 5px; right: 5px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent); border: 1.5px solid var(--page);
+}
+.remind-pop {
+  position: fixed; z-index: 20;
+  width: 300px; max-width: calc(100vw - 24px);
+  background: var(--elevated);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  box-shadow: var(--shadow-2);
+  padding: 14px 16px;
+}
+.remind-head { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.remind-head strong { font-size: 14px; }
+.remind-sub { font-size: 12px; color: var(--ink-muted); line-height: 1.4; }
+.remind-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; font-size: 13.5px; }
+.remind-row label { color: var(--ink-2); }
+.remind-row input[type="time"], .remind-row input[type="number"] {
+  font: inherit; font-size: 13px; padding: 4px 8px;
+  border: 1px solid var(--hairline); border-radius: 8px;
+  background: var(--surface); color: var(--ink);
+}
+.remind-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.remind-msg { font-size: 12px; margin-top: 8px; min-height: 1em; color: var(--ink-2); }
+.remind-msg.ok { color: var(--good); }
+.remind-msg.err { color: var(--critical); }
