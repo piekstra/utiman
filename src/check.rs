@@ -9,9 +9,12 @@ use std::time::Duration;
 
 use anyhow::Result;
 
+use crate::anomaly::Anomaly;
 use crate::dates::parse_due;
+use crate::detect::find_binary;
+use crate::extract::extract_series;
 use crate::manifest::load_providers;
-use crate::runner::DEFAULT_TIMEOUT_SECS;
+use crate::runner::{run_cli, DEFAULT_TIMEOUT_SECS};
 use crate::summary::{summarize, Summary};
 
 struct Due {
@@ -27,9 +30,14 @@ struct Failed {
 }
 
 /// Run the report. `within` is the notify/urgency window in days; `notify`
-/// raises a macOS notification for due-soon items. Returns the process exit
-/// code (2 when something is due within the window or overdue).
-pub async fn run(within: i64, notify: bool, json: bool) -> Result<i32> {
+/// raises a macOS notification for due-soon items. With `anomalies`, report
+/// unusually-high recent bills instead. Returns the process exit code (2 when
+/// something is due within the window / overdue, or — in anomaly mode — when
+/// any bill is flagged).
+pub async fn run(within: i64, notify: bool, json: bool, anomalies: bool) -> Result<i32> {
+    if anomalies {
+        return run_anomalies(notify, json).await;
+    }
     let providers = load_providers();
     let timeout = Duration::from_secs(DEFAULT_TIMEOUT_SECS);
 
@@ -86,6 +94,126 @@ pub async fn run(within: i64, notify: bool, json: bool) -> Result<i32> {
     }
 
     Ok(exit_code(soon.is_empty()))
+}
+
+/// A flagged bill: which provider/series, and by how much it's over the norm.
+struct AnomalyHit {
+    provider: String,
+    series: String,
+    anomaly: Anomaly,
+}
+
+/// Scan every installed provider's money series for an unusually-high latest
+/// bill, using the same archived history the dashboard charts from. Exit 2 if
+/// anything is flagged (so cron can act), else 0.
+async fn run_anomalies(notify: bool, json: bool) -> Result<i32> {
+    let timeout = Duration::from_secs(DEFAULT_TIMEOUT_SECS);
+    let mut hits = Vec::new();
+    for p in load_providers() {
+        let Some(bin) = find_binary(&p.manifest.binary) else {
+            continue;
+        };
+        for series in p
+            .manifest
+            .series
+            .iter()
+            .filter(|s| s.unit.as_deref() == Some("usd"))
+        {
+            let out = run_cli(&bin, &series.args, timeout).await;
+            if !out.ok() {
+                continue;
+            }
+            let fresh = extract_series(series, &out.stdout);
+            let points = crate::archive::merge(&p.manifest.id, &series.id, &fresh);
+            let values: Vec<f64> = points.iter().map(|pt| pt.value).collect();
+            if let Some(anomaly) = crate::anomaly::detect(&values) {
+                hits.push(AnomalyHit {
+                    provider: p.manifest.name.clone(),
+                    series: series.name.clone(),
+                    anomaly,
+                });
+            }
+        }
+    }
+    // Biggest overage first.
+    hits.sort_by(|a, b| {
+        b.anomaly
+            .pct_over
+            .partial_cmp(&a.anomaly.pct_over)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    if json {
+        print_anomalies_json(&hits);
+    } else {
+        print_anomalies_text(&hits);
+    }
+    if notify && !hits.is_empty() {
+        notify_anomalies(&hits);
+    }
+    Ok(exit_code(hits.is_empty()))
+}
+
+/// "80% over the usual" phrasing for an anomaly.
+fn over_phrase(a: &Anomaly) -> String {
+    format!(
+        "{:.0}% over the usual {}",
+        a.pct_over * 100.0,
+        money(Some(a.baseline))
+    )
+}
+
+fn print_anomalies_text(hits: &[AnomalyHit]) {
+    if hits.is_empty() {
+        println!("No unusual bills — every account is near its norm.");
+        return;
+    }
+    for h in hits {
+        println!(
+            "! {:<20} {:<16} {:>10}   {}",
+            h.provider,
+            h.series,
+            money(Some(h.anomaly.latest)),
+            over_phrase(&h.anomaly),
+        );
+    }
+}
+
+fn print_anomalies_json(hits: &[AnomalyHit]) {
+    let items: Vec<serde_json::Value> = hits
+        .iter()
+        .map(|h| {
+            serde_json::json!({
+                "provider": h.provider,
+                "series": h.series,
+                "latest": h.anomaly.latest,
+                "baseline": h.anomaly.baseline,
+                "pct_over": h.anomaly.pct_over,
+            })
+        })
+        .collect();
+    let out = serde_json::json!({ "anomalies": items });
+    println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
+}
+
+fn notify_anomalies(hits: &[AnomalyHit]) {
+    if std::env::consts::OS != "macos" {
+        return;
+    }
+    let title = format!("utiman: {} unusual bill(s)", hits.len());
+    let lead = hits
+        .iter()
+        .map(|h| format!("{} {}", h.provider, money(Some(h.anomaly.latest))))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let script = format!(
+        "display notification \"{}\" with title \"{}\"",
+        applescript_escape(&lead),
+        applescript_escape(&title),
+    );
+    let _ = std::process::Command::new("/usr/bin/osascript")
+        .args(["-e", &script])
+        .output();
 }
 
 /// Order the report soonest-first; undated items sort last.
@@ -210,6 +338,16 @@ mod tests {
     fn money_formatting() {
         assert_eq!(money(Some(84.2)), "$84.20");
         assert_eq!(money(None), "—");
+    }
+
+    #[test]
+    fn anomaly_over_phrase() {
+        let a = Anomaly {
+            latest: 180.0,
+            baseline: 100.0,
+            pct_over: 0.80,
+        };
+        assert_eq!(over_phrase(&a), "80% over the usual $100.00");
     }
 
     #[test]

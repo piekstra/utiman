@@ -397,6 +397,17 @@ function skeletonBody() {
   return wrap;
 }
 
+// The first flagged bill-anomaly across a provider's series, if any. The server
+// tags a usd series (server.rs) when its latest bill is unusually high vs its
+// own history; this surfaces that as a card warning.
+function anomalyFor(p) {
+  for (const s of p.series || []) {
+    const r = state.series.get(`${p.id}/${s.id}`);
+    if (r?.ok && r.anomaly) return r.anomaly;
+  }
+  return null;
+}
+
 // "2026-06" -> "Jun 2026" for compact month labels.
 function monthLabel(key) {
   const M3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -531,6 +542,16 @@ function renderCards() {
         due.append("No due date reported");
       }
       card.append(due);
+      // Bill shock: the latest bill is unusually high vs this account's history.
+      const anom = anomalyFor(p);
+      if (anom) {
+        const line = el("div", { class: "card-status warn" });
+        line.append(
+          icon("i-alert"),
+          `Latest bill ${usd.format(anom.latest)} — ${Math.round(anom.pct_over * 100)}% over usual`,
+        );
+        card.append(line);
+      }
       // A payment you made hasn't posted to the portal balance yet.
       if (s.pending) {
         const pend = el("div", { class: "card-status pending" });

@@ -5,6 +5,7 @@
 //! no credentials: each CLI manages its own (typically in the OS keychain),
 //! and anything interactive (logins) happens in your terminal, not here.
 
+mod anomaly;
 mod archive;
 mod check;
 mod dates;
@@ -50,17 +51,21 @@ enum Command {
         file: PathBuf,
     },
     /// Report which bills are due (and how soon). Exit code 2 if anything is
-    /// due within --within days or overdue — handy from cron.
+    /// due within --within days or overdue — handy from cron. With --anomalies,
+    /// report unusually-high recent bills instead (exit 2 if any are flagged).
     Check {
         /// Days-ahead window for "due soon" (and notifications).
         #[arg(long, default_value_t = 5)]
         within: i64,
-        /// Raise a macOS notification for due-soon bills.
+        /// Raise a macOS notification for due-soon (or, with --anomalies, unusual) bills.
         #[arg(long)]
         notify: bool,
         /// Emit JSON instead of a text table.
         #[arg(long)]
         json: bool,
+        /// Report unusually-high recent bills instead of the due-date table.
+        #[arg(long)]
+        anomalies: bool,
     },
     /// Update utiman to the latest release from GitHub (like the CLIs it manages).
     SelfUpdate(pk_cli_selfupdate::SelfUpdateArgs),
@@ -87,8 +92,9 @@ fn main() -> Result<()> {
                 within,
                 notify,
                 json,
+                anomalies,
             } => {
-                let code = check::run(within, notify, json).await?;
+                let code = check::run(within, notify, json, anomalies).await?;
                 std::process::exit(code);
             }
             Command::SelfUpdate(_) => unreachable!("handled before the runtime"),
