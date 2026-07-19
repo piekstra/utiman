@@ -24,6 +24,7 @@ shells out to provider binaries described by TOML manifests.
 | `src/summary.rs` | shared "run summary → balance + due" helper (server + `check`) |
 | `src/check.rs` | `utiman check`: due-date report, urgency triage, macOS notify; `--anomalies` bill-shock report |
 | `src/anomaly.rs` | flags an unusually-high latest bill (>40% over the prior-periods median) |
+| `src/remind.rs` | `utiman remind`: daily launchd agent running `check --notify` (macOS) |
 | `src/dates.rs` | dependency-free date parsing (ISO/US dates + cycle labels like `Jun 2026` / `2026-06` via `parse_label`) + days-from-today math |
 | `src/server.rs` | axum routes, Host-header guard, API handlers |
 | `src/assets/` | embedded frontend (index.html / app.js / charts.js / style.css) |

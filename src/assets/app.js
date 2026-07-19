@@ -1364,6 +1364,93 @@ document.addEventListener("keydown", (ev) => {
   if (ev.key === "Escape" && !$("#drawer").hidden) closeDrawer();
 });
 
+// ---------- daily reminder (macOS launchd) ----------
+(function initReminders() {
+  const btn = $("#remind-toggle");
+  const pop = $("#remind-pop");
+  const at = $("#remind-at");
+  const within = $("#remind-within");
+  const save = $("#remind-save");
+  const off = $("#remind-off");
+  const msg = $("#remind-msg");
+
+  // Paint the button + form to match the current install state.
+  function reflect(r) {
+    const on = !!r;
+    btn.classList.toggle("on", on);
+    off.hidden = !on;
+    save.textContent = on ? "Update" : "Turn on";
+    if (r) {
+      at.value = `${String(r.hour).padStart(2, "0")}:${String(r.minute).padStart(2, "0")}`;
+      within.value = r.within;
+    }
+    btn.title = on ? `Daily reminder at ${at.value}` : "Daily reminder";
+  }
+
+  async function load() {
+    try {
+      const s = await api("/api/reminders");
+      btn.hidden = s.os !== "macos"; // launchd is macOS-only
+      reflect(s.reminder);
+    } catch {
+      btn.hidden = true;
+    }
+  }
+
+  function place() {
+    const r = btn.getBoundingClientRect();
+    pop.style.top = `${r.bottom + 8}px`;
+    pop.style.right = `${window.innerWidth - r.right}px`;
+  }
+
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const show = pop.hidden;
+    if (show) { place(); msg.textContent = ""; }
+    pop.hidden = !show;
+  });
+  document.addEventListener("click", (e) => {
+    if (!pop.hidden && !pop.contains(e.target) && e.target !== btn) pop.hidden = true;
+  });
+
+  save.addEventListener("click", async () => {
+    save.disabled = true;
+    msg.textContent = "…";
+    msg.className = "remind-msg";
+    try {
+      const r = await api("/api/reminders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ at: at.value, within: Number(within.value) || 5 }),
+      });
+      reflect(r.reminder);
+      msg.textContent = "✓ On — you'll be notified daily.";
+      msg.className = "remind-msg ok";
+      toast(`Reminder on — daily at ${at.value}`);
+    } catch (e) {
+      msg.textContent = String(e.message || e);
+      msg.className = "remind-msg err";
+    }
+    save.disabled = false;
+  });
+
+  off.addEventListener("click", async () => {
+    off.disabled = true;
+    try {
+      await api("/api/reminders", { method: "DELETE" });
+      reflect(null);
+      msg.textContent = "Reminder off.";
+      toast("Reminder off");
+    } catch (e) {
+      msg.textContent = String(e.message || e);
+      msg.className = "remind-msg err";
+    }
+    off.disabled = false;
+  });
+
+  load();
+})();
+
 // Reveal the target section and paint the loading shell *before* the (slow)
 // data fetch — otherwise the whole dashboard stays hidden until every summary
 // resolves, so the user stares at a blank page with no sign of progress.
