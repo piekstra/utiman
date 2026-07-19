@@ -13,8 +13,30 @@ permissions:
   contents: write
 
 jobs:
+  # Gate the whole release on the pushed tag matching Cargo.toml's version.
+  # `cargo build` bakes `env!("CARGO_PKG_VERSION")` into the binary as the
+  # value `utiman self-update` compares against, so a tag/manifest mismatch
+  # would ship binaries that self-report the wrong version and quietly break
+  # the update check. One fast job the build matrix depends on catches it
+  # before anything is built or published.
+  verify:
+    name: verify tag matches Cargo.toml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag must equal Cargo.toml version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          manifest="$(grep -m1 '^version' Cargo.toml | sed -E 's/^version *= *"([^"]+)".*/\1/')"
+          echo "pushed tag: v$tag   Cargo.toml version: $manifest"
+          if [ "$tag" != "$manifest" ]; then
+            echo "::error::Release tag v$tag does not match Cargo.toml version $manifest. Bump Cargo.toml (or retag) so the binary's baked-in version matches the release — utiman self-update compares against it." >&2
+            exit 1
+          fi
+
   build:
     name: build ${{ matrix.name }}
+    needs: verify
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
