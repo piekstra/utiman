@@ -140,6 +140,7 @@ pub struct Point {
 
 /// Extract labelled points from a series command's output.
 pub fn extract_series(series: &crate::manifest::Series, stdout: &str) -> Vec<Point> {
+    let mut profile_envelope = false;
     let records: Vec<serde_json::Map<String, Value>> = match series.format.as_str() {
         "table" => parse_pipe_table(stdout),
         _ => {
@@ -147,6 +148,7 @@ pub fn extract_series(series: &crate::manifest::Series, stdout: &str) -> Vec<Poi
                 return Vec::new();
             };
             let items = if let Some(items) = profile_items(&root) {
+                profile_envelope = true;
                 Some(items)
             } else if series.items_path.is_empty() {
                 Some(&root)
@@ -162,7 +164,10 @@ pub fn extract_series(series: &crate::manifest::Series, stdout: &str) -> Vec<Poi
         }
     };
 
-    let scale = if series.scale.as_deref() == Some("cents") {
+    // Profile semantics are canonical: Money is decimal dollars and
+    // quantities are plain numbers, so a stale manifest `scale = "cents"`
+    // must not divide values that came from a profile envelope.
+    let scale = if !profile_envelope && series.scale.as_deref() == Some("cents") {
         100.0
     } else {
         1.0
@@ -426,6 +431,31 @@ mod tests {
         assert_eq!(pts[0].label, "2026-06-15");
         assert_eq!(pts[0].value, 84.21);
         assert_eq!(pts[1].value, 79.00);
+    }
+
+    #[test]
+    fn paged_envelope_ignores_stale_cents_scale() {
+        // A manifest written for the pre-profile CLI (`amount.cents` +
+        // scale="cents") must still chart correctly against profile output:
+        // the fallback chain reaches `amount`, and the envelope suppresses
+        // the cents division.
+        let s = series(
+            "json",
+            "",
+            "date",
+            &["amount.cents", "amount"],
+            Some("cents"),
+        );
+        let out = r#"{"schema":"statement-list/v1","items":[
+            {"id":"1","date":"2026-06-15","amount":{"amount":"84.21","currency":"USD"}}]}"#;
+        let pts = extract_series(&s, out);
+        assert_eq!(pts.len(), 1);
+        assert_eq!(pts[0].value, 84.21);
+
+        // …while the same manifest against pre-profile output still scales.
+        let old = r#"[{"date":"06/15/2026","amount":{"cents":8421}}]"#;
+        let pts = extract_series(&s, old);
+        assert_eq!(pts[0].value, 84.21);
     }
 
     #[test]
