@@ -316,10 +316,20 @@ function renderTimeline() {
   today.append(el("span", { class: "tl-today-label" }, "Today"));
   track.append(today);
 
-  // Stagger labels above/below the line so close dates don't collide.
-  bills.forEach((b, i) => {
+  // Stagger labels above/below by *proximity*, not index parity: place each
+  // marker on whichever side's last marker is farther away. Bills are sorted by
+  // day, so a cluster in the same week spreads across both rows (e.g. 3 close
+  // bills go above/below/above) instead of stacking two labels on one side.
+  const lastX = { above: -Infinity, below: -Infinity };
+  const sideFor = (x) => {
+    const side = x - lastX.above >= x - lastX.below ? "above" : "below";
+    lastX[side] = x;
+    return side;
+  };
+
+  bills.forEach((b) => {
     const marker = el("div", {
-      class: `tl-bill ${urgencyOf(b.days)} ${i % 2 ? "below" : "above"}`,
+      class: `tl-bill ${urgencyOf(b.days)} ${sideFor(frac(b.days))}`,
       role: "button", tabindex: "0",
       title: `${b.name}: ${usd.format(b.balance)} due ${b.due} (${whenLabel(b.days)})`,
     });
