@@ -138,6 +138,7 @@ function renderDashboard() {
   renderStats();
   renderHighlights();
   renderCards();
+  renderRollup();
   const any = summaryProviders().length > 0;
   // While a load is in flight, keep the stats strip up (it carries the loading
   // hero + progress) and never flash the "no providers yet" empty state before
@@ -300,6 +301,72 @@ function skeletonBody() {
   status.append(spin, "Checking…");
   wrap.append(el("div", { class: "skeleton skel-value" }), status);
   return wrap;
+}
+
+// "2026-06" -> "Jun 2026" for compact month labels.
+function monthLabel(key) {
+  const M3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const [y, m] = key.split("-");
+  return `${M3[Number(m) - 1]} ${y}`;
+}
+
+// Sum every provider's dollar-denominated series (bills / payments — units in
+// kWh or gallons are skipped) by calendar month, into stacked per-provider
+// segments. The cross-provider view the per-account charts can't give.
+function spendRollup() {
+  const provMap = new Map();          // id -> { id, name, kind }
+  const byMonth = new Map();          // "YYYY-MM" -> Map(id -> summed value)
+  for (const p of summaryProviders()) {
+    for (const s of p.series || []) {
+      const r = state.series.get(`${p.id}/${s.id}`);
+      if (!r?.ok || r.unit !== "usd") continue;
+      provMap.set(p.id, { id: p.id, name: p.name, kind: p.kind });
+      for (const pt of r.points) {
+        const d = labelToDate(pt.label);
+        if (!d) continue;
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        if (!byMonth.has(key)) byMonth.set(key, new Map());
+        const mm = byMonth.get(key);
+        mm.set(p.id, (mm.get(p.id) || 0) + Math.abs(pt.value));
+      }
+    }
+  }
+  const providers = [...provMap.values()];
+  const months = [...byMonth.entries()]
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .slice(-12) // a year is plenty of bars
+    .map(([key, mm]) => {
+      const segments = [...mm.entries()].map(([id, value]) => ({
+        id, value, name: provMap.get(id).name, kind: provMap.get(id).kind,
+      }));
+      return { label: monthLabel(key), total: segments.reduce((a, s) => a + s.value, 0), segments };
+    });
+  return { months, providers };
+}
+
+// Stacked "Total monthly spend" chart. Injected after the timeline/highlights;
+// only shown with 2+ providers and 2+ months, where it adds something the
+// single-account charts don't.
+function renderRollup() {
+  let box = $("#rollup");
+  if (!box) {
+    box = el("div", { class: "rollup", id: "rollup" });
+    ($("#timeline") || $("#highlights") || $("#stats-strip")).after(box);
+  }
+  const { months, providers } = spendRollup();
+  if (months.length < 2 || providers.length < 2) {
+    box.replaceChildren();
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  box.replaceChildren();
+  const latest = months[months.length - 1];
+  box.append(el("div", { class: "rollup-head" },
+    el("strong", {}, "Total monthly spend"),
+    el("span", { class: "rollup-sub" },
+      `${providers.length} utilities · latest ${latest.label}: ${usd.format(latest.total)}`)));
+  box.append(renderSpendChart(months, providers));
 }
 
 function renderCards() {
