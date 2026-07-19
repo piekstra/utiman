@@ -139,7 +139,9 @@ function plot(spec, container) {
       class: g === 0 ? "axis-line" : "grid-line",
     }));
     const lbl = svgEl("text", { x: M.left - 6, y: y + 4, class: "tick", "text-anchor": "end" });
-    const labelVal = (allNonPositive ? -1 : 1) * domain * g;
+    // `|| 0` collapses the -0 that `-1 * domain * 0` yields at the baseline,
+    // so an all-credit chart's zero gridline reads "$0.00", not "-$0.00".
+    const labelVal = (allNonPositive ? -1 : 1) * domain * g || 0;
     lbl.textContent = fmtVal(labelVal, spec.unit === "usd" ? "usd" : undefined);
     svg.append(lbl);
   }
