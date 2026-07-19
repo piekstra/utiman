@@ -245,6 +245,13 @@ async fn series_data(Path((id, sid)): Path<(String, String)>) -> Response {
     // Fold this fetch into the local archive and return the merged history, so
     // charts extend past the CLI's own window the longer utiman runs.
     let points = crate::archive::merge(&id, &series.id, &fresh);
+    // Flag an unusually-high latest bill on money series (points are newest-first).
+    let anomaly = if series.unit.as_deref() == Some("usd") {
+        let values: Vec<f64> = points.iter().map(|p| p.value).collect();
+        crate::anomaly::detect(&values)
+    } else {
+        None
+    };
     Json(json!({
         "ok": true,
         "points": points,
@@ -252,6 +259,7 @@ async fn series_data(Path((id, sid)): Path<(String, String)>) -> Response {
         "unit": series.unit,
         "chart": series.chart,
         "name": series.name,
+        "anomaly": anomaly,
     }))
     .into_response()
 }
