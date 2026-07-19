@@ -390,6 +390,57 @@ svg.sparkline { width: 120px; height: 30px; }
 .delta-up { color: var(--critical); font-weight: 600; }
 .delta-down { color: var(--good); font-weight: 600; }
 
+/* ---------- upcoming-bills timeline ---------- */
+.timeline {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  padding: 14px 18px 18px;
+  margin: 16px 0 22px;
+  box-shadow: var(--shadow-1);
+  overflow-x: clip; /* safety: a near-edge label can't scroll the page */
+}
+.timeline-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.timeline-head strong { font-size: 14px; letter-spacing: -0.01em; }
+.timeline-sub { font-size: 12.5px; color: var(--ink-muted); }
+.timeline-track { position: relative; height: 132px; }
+.tl-line {
+  position: absolute; left: 0; right: 0; top: 50%; height: 2px;
+  background: var(--grid); border-radius: 2px;
+}
+.tl-today {
+  position: absolute; top: calc(50% - 20px); height: 40px; width: 0;
+  border-left: 1.5px dashed var(--ink-muted); transform: translateX(-50%);
+}
+.tl-today-label {
+  position: absolute; top: -16px; left: 50%; transform: translateX(-50%);
+  font-size: 10.5px; font-weight: 600; color: var(--ink-muted); white-space: nowrap;
+}
+.tl-bill {
+  position: absolute; top: 50%; transform: translate(-50%, -50%);
+  cursor: pointer; outline-offset: 3px;
+}
+.tl-dot {
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 2px solid var(--surface); background: var(--accent);
+  box-shadow: 0 0 0 1px var(--hairline);
+  transition: transform 0.14s ease;
+}
+.tl-bill.warn .tl-dot { background: var(--warning); }
+.tl-bill.crit .tl-dot { background: var(--critical); }
+.tl-bill:hover .tl-dot, .tl-bill:focus-visible .tl-dot { transform: scale(1.25); }
+.tl-label {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: 132px; text-align: center; line-height: 1.25;
+}
+.tl-bill.above .tl-label { bottom: 15px; }
+.tl-bill.below .tl-label { top: 15px; }
+.tl-amt { display: block; font-size: 13px; font-weight: 650; color: var(--ink); }
+.tl-who { display: block; font-size: 11px; color: var(--ink-2); }
+.tl-bill.warn .tl-who { color: var(--warning); }
+.tl-bill.crit .tl-who { color: var(--critical); }
+@media (max-width: 560px) { .tl-who { display: none; } .timeline-track { height: 92px; } }
+
 /* ---------- catalog ---------- */
 .catalog-grid {
   display: grid;
