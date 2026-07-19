@@ -52,6 +52,7 @@
     </a>
     <nav class="tabs" aria-label="Sections">
       <a href="#/dashboard" data-tab="dashboard">Dashboard</a>
+      <a href="#/report" data-tab="report">Report</a>
       <a href="#/catalog" data-tab="catalog">Catalog</a>
       <a href="#/add" data-tab="add">Add provider</a>
     </nav>
@@ -93,6 +94,19 @@
       <p>Install a utility CLI from the catalog and your accounts show up here.</p>
       <a class="btn primary" href="#/catalog">Browse the catalog</a>
     </div>
+  </section>
+
+  <section id="view-report" hidden>
+    <div class="report-bar">
+      <div class="section-head">
+        <h1>Household report</h1>
+        <p>A one-page summary of every utility — print it or save it as a PDF.</p>
+      </div>
+      <button id="report-print" class="btn">
+        <svg class="ic"><use href="#i-download"/></svg><span>Print / Save PDF</span>
+      </button>
+    </div>
+    <div id="report"></div>
   </section>
 
   <section id="view-catalog" hidden>

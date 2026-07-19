@@ -117,11 +117,12 @@ function duePill(dateStr) {
 function route() {
   const h = location.hash || "#/dashboard";
   const provider = h.match(/^#\/p\/([a-z0-9-]+)$/)?.[1];
-  const tab = provider ? "dashboard" : (h.match(/^#\/(dashboard|catalog|add)$/)?.[1] || "dashboard");
-  for (const sec of ["dashboard", "catalog", "add"]) {
+  const tab = provider ? "dashboard" : (h.match(/^#\/(dashboard|report|catalog|add)$/)?.[1] || "dashboard");
+  for (const sec of ["dashboard", "report", "catalog", "add"]) {
     $(`#view-${sec}`).hidden = sec !== tab;
   }
   $$(".tabs a").forEach((a) => a.classList.toggle("active", a.dataset.tab === tab));
+  if (tab === "report") renderReport();
   const p = provider && state.providers.find((x) => x.id === provider);
   if (p) openDrawer(p);
   else hideDrawer();
@@ -146,6 +147,76 @@ function renderDashboard() {
   // we've even finished discovering them.
   $("#dash-empty").hidden = any || state.loading;
   $("#stats-strip").hidden = !any && !state.loading;
+  // Keep the report fresh if it's the view being shown while data streams in.
+  if (!$("#view-report").hidden) renderReport();
+}
+
+// A one-page, print-friendly summary of every utility: totals, a full account
+// table, and the cross-provider monthly spend. Built from the same loaded
+// state as the dashboard.
+function renderReport() {
+  const root = $("#report");
+  root.replaceChildren();
+  const provs = summaryProviders();
+  // Match the dashboard hero exactly (raw sum of readable balances, credits
+  // included) so the same "Total due" isn't shown two different ways.
+  const totalDue = provs.reduce((sum, p) => {
+    const s = state.summaries.get(p.id);
+    return s?.state === "ok" && s.balance != null ? sum + s.balance : sum;
+  }, 0);
+
+  const dues = provs
+    .map((p) => {
+      const s = state.summaries.get(p.id);
+      const due = s?.state === "ok" && s.due_date ? cleanDueDate(s.due_date) : null;
+      return { p, days: due && s.balance > 0 ? daysUntil(due) : null };
+    })
+    .filter((d) => d.days != null && d.days >= 0)
+    .sort((a, b) => a.days - b.days);
+
+  root.append(el("div", { class: "report-meta" }, `Generated ${new Date().toLocaleString()}`));
+  const summary = el("div", { class: "report-summary" });
+  const kv = (k, v) => el("div", { class: "report-kv" },
+    el("div", { class: "report-k" }, k), el("div", { class: "report-v" }, v));
+  summary.append(kv("Utilities", String(provs.length)), kv("Total due now", usd.format(totalDue)));
+  if (dues.length) {
+    const d = dues[0];
+    summary.append(kv("Next due", `${d.p.name} · ${d.days === 0 ? "today" : `in ${d.days}d`}`));
+  }
+  root.append(summary);
+
+  const table = el("table", { class: "report-table" });
+  const thead = el("thead");
+  const hr = el("tr");
+  for (const h of ["Utility", "Provider", "Balance", "Due date", "Status"]) hr.append(el("th", {}, h));
+  thead.append(hr);
+  const tbody = el("tbody");
+  for (const p of provs) {
+    const s = state.summaries.get(p.id);
+    const tr = el("tr");
+    const cells = [el("td", { class: "cap" }, p.kind), el("td", {}, p.name)];
+    if (s?.state === "ok") {
+      const due = s.due_date ? cleanDueDate(s.due_date) : null;
+      const dated = due && daysUntil(due) != null;
+      cells.push(
+        el("td", { class: "num" }, s.balance == null ? "—" : usd.format(s.balance)),
+        el("td", {}, dated ? due : "—"),
+        el("td", {}, s.balance == null ? "—" : s.balance > 0 ? "Due" : "Clear"));
+    } else {
+      cells.push(el("td", { class: "num" }, "—"), el("td", {}, "—"),
+        el("td", {}, s?.state === "error" ? "Couldn't read" : "—"));
+    }
+    tr.append(...cells);
+    tbody.append(tr);
+  }
+  table.append(thead, tbody);
+  root.append(table);
+
+  const { months, providers } = spendRollup();
+  if (months.length >= 2 && providers.length) {
+    root.append(el("h2", { class: "report-h2" }, "Monthly spend"));
+    root.append(renderSpendChart(months, providers));
+  }
 }
 
 function renderStats() {
@@ -1360,6 +1431,7 @@ function reopenDrawerIfOpen() {
 $("#refresh").addEventListener("click", refresh);
 $("#register-btn").addEventListener("click", register);
 $("#theme-toggle").addEventListener("click", cycleTheme);
+$("#report-print").addEventListener("click", () => window.print());
 updateThemeToggle();
 $("#modal-close").addEventListener("click", () => $("#output-modal").close());
 $("#drawer-close").addEventListener("click", closeDrawer);
