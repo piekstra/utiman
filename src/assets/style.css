@@ -248,7 +248,7 @@ main { max-width: 1080px; margin: 0 auto; padding: 26px 20px 60px; }
 }
 .card.clickable { cursor: pointer; }
 .card.clickable:hover { box-shadow: var(--shadow-2); transform: translateY(-2px); }
-.card-top { display: flex; align-items: center; gap: 11px; }
+.card-top { display: flex; align-items: flex-start; gap: 11px; }
 .card-refresh { padding: 5px; color: var(--ink-muted); opacity: 0; transition: opacity 0.15s ease, color 0.15s ease; }
 .card-refresh .ic { width: 15px; height: 15px; }
 .card.clickable:hover .card-refresh { opacity: 1; }
@@ -259,8 +259,11 @@ main { max-width: 1080px; margin: 0 auto; padding: 26px 20px 60px; }
 .card-refresh.busy .ic { animation: spin 0.9s linear infinite; }
 .ic.spin { animation: spin 0.9s linear infinite; }
 .card-title { flex: 1; min-width: 0; }
-.card-name { font-weight: 650; font-size: 15px; letter-spacing: -0.01em; }
+.card-name { font-weight: 650; font-size: 15px; letter-spacing: -0.01em; line-height: 1.25; }
+.card-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 3px; }
 .card-sub { font-size: 12px; color: var(--ink-muted); }
+/* Chips on the meta row are compact so name + kind + status read as one unit. */
+.card-meta .pill { font-size: 11px; padding: 1px 8px; }
 
 .badge {
   width: 38px; height: 38px;
