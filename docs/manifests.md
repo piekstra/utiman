@@ -71,7 +71,7 @@ items-path = ""                      # dot-path to the record array ("" = JSON r
 label-field = "period"               # each record's x label
 value-fields = ["quantity"]          # fallbacks, tried in order
 unit = "gallons"                     # "usd" formats as money; else shown as-is
-# scale = "cents"                    # divide values by 100
+# scale = "cents"                    # divide values by 100 (ignored for -list/v1 envelopes)
 chart = "bar"                        # "bar" (default) or "line"
 
 [[documents]]                        # downloadable files (bill PDFs etc.)
@@ -175,6 +175,13 @@ upstream payload shape varies. Balances accept numbers or strings
 (`"$1,234.56"`, `(5.00)` for credits); `scale = "cents"` divides by 100.
 Extracted balances are displayed as USD.
 
+**utility/v1 fast path:** when the command's output carries a
+`"schema": "utility-summary/v1"` tag (a CLI on cli-common ≥ v0.2.0), the
+whole field-list mechanism is bypassed — `balance` (a Money object) and
+`due_date` are read directly, and `balance-fields`/`due-date-fields`/`scale`
+are ignored. Stale field config is safe to leave in place for older CLI
+versions; it simply becomes a no-op once the CLI emits the canonical DTO.
+
 ### `[[series]]`
 
 Time-series the CLI can report — usage per period, bill amounts, payments.
@@ -184,6 +191,15 @@ default) or, with `format = "table"`, from a pipe-delimited text table whose
 header row names the fields (matched case-insensitively, so `label-field =
 "Month"` finds a `MONTH` column). Points are assumed newest-first, matching
 how the CLIs print.
+
+**utility/v1 fast path:** a `"<record>-list/v1"`-tagged Paged envelope
+(cli-common ≥ v0.2.0) is unwrapped automatically — records are read from its
+`items` array regardless of `items-path`, Money-object values resolve by
+their decimal amount (so `value-fields = ["amount"]` just works), and any
+`scale = "cents"` is suppressed for those records (profile Money is already
+decimal dollars). Keep pre-profile paths and `scale` in the manifest as
+fallbacks for older CLI versions — they're ignored once the envelope
+appears.
 
 utiman also keeps a **local series archive**: every fetched series is
 merged into `~/.local/share/utiman/series/<provider>__<series>.jsonl`

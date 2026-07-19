@@ -103,9 +103,11 @@ fn first_json_field<'v>(root: &'v Value, paths: &[String]) -> Option<&'v Value> 
 
 fn json_scalar(v: &Value) -> String {
     // A profile `Money` object scalarizes to its decimal amount, so
-    // `value-fields = ["amount"]` works on utility/v1 records.
+    // `value-fields = ["amount"]` works on utility/v1 records. Detect by the
+    // fields Money actually carries (string amount + string currency) rather
+    // than key count, so additive DTO growth can't silently break this.
     if let Some(map) = v.as_object() {
-        if map.len() == 2 && map.contains_key("currency") {
+        if map.get("currency").is_some_and(Value::is_string) {
             if let Some(amount) = map.get("amount").and_then(Value::as_str) {
                 return amount.to_string();
             }
@@ -431,6 +433,25 @@ mod tests {
         assert_eq!(pts[0].label, "2026-06-15");
         assert_eq!(pts[0].value, 84.21);
         assert_eq!(pts[1].value, 79.00);
+    }
+
+    #[test]
+    fn money_objects_scalarize_by_fields_not_shape() {
+        use serde_json::json;
+        assert_eq!(
+            json_scalar(&json!({"amount": "84.21", "currency": "USD"})),
+            "84.21"
+        );
+        // Additive DTO growth must not break detection…
+        assert_eq!(
+            json_scalar(&json!({"amount": "84.21", "currency": "USD", "note": "x"})),
+            "84.21"
+        );
+        // …while amount-without-currency is not money.
+        assert_eq!(
+            json_scalar(&json!({"amount": "1.00", "kind": "fee"})),
+            r#"{"amount":"1.00","kind":"fee"}"#
+        );
     }
 
     #[test]
