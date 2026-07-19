@@ -15,6 +15,7 @@ const state = {
   checkedAt: new Map(),   // id -> Date.now() of last summary fetch
   refreshedAt: null,
   os: null,               // server host OS ("macos" | "linux" | ...)
+  loading: false,         // a full load/refresh is fetching summaries
 };
 
 const isMac = () => state.os === "macos";
@@ -138,13 +139,37 @@ function renderDashboard() {
   renderHighlights();
   renderCards();
   const any = summaryProviders().length > 0;
-  $("#dash-empty").hidden = any;
-  $("#stats-strip").hidden = !any;
+  // While a load is in flight, keep the stats strip up (it carries the loading
+  // hero + progress) and never flash the "no providers yet" empty state before
+  // we've even finished discovering them.
+  $("#dash-empty").hidden = any || state.loading;
+  $("#stats-strip").hidden = !any && !state.loading;
 }
 
 function renderStats() {
   const oks = [...state.summaries.entries()].filter(([, s]) => s.state === "ok" && s.balance != null);
-  $("#hero-value").textContent = usd.format(oks.reduce((sum, [, s]) => sum + s.balance, 0));
+  const { done, total } = loadProgress();
+  const hero = $("#hero-value");
+  $("#load-bar").hidden = !state.loading;
+
+  if (state.loading && done === 0) {
+    // Nothing read yet — a shimmer reads as "working", where "$0.00" would
+    // look like a real (wrong) total.
+    hero.textContent = "";
+    hero.classList.add("loading");
+  } else {
+    hero.classList.remove("loading");
+    hero.textContent = usd.format(oks.reduce((sum, [, s]) => sum + s.balance, 0));
+  }
+  // While a load is in flight, show how many accounts are still pending so the
+  // total visibly builds up instead of jumping from nothing to the final value.
+  const prog = $("#hero-progress");
+  if (state.loading && done < total) {
+    prog.textContent = `checking ${total - done} of ${total} account${total === 1 ? "" : "s"}…`;
+    prog.hidden = false;
+  } else {
+    prog.hidden = true;
+  }
 
   // The total only sums accounts we could read. If some failed (expired
   // session etc.), say so — an unqualified total would silently under-report.
@@ -236,6 +261,19 @@ function statusLine(cls, iconName, text) {
   return s;
 }
 
+// A card whose summary hasn't arrived yet: a shimmering value placeholder plus
+// a clearly-labelled "Checking…" line, so a loading card reads as in-progress
+// rather than blank or broken.
+function skeletonBody() {
+  const wrap = el("div", { class: "card-loading" });
+  const spin = icon("i-refresh");
+  spin.classList.add("spin");
+  const status = el("div", { class: "card-status checking" });
+  status.append(spin, "Checking…");
+  wrap.append(el("div", { class: "skeleton skel-value" }), status);
+  return wrap;
+}
+
 function renderCards() {
   const cards = $("#cards");
   cards.replaceChildren();
@@ -280,7 +318,7 @@ function renderCards() {
 
     const s = state.summaries.get(p.id);
     if (!s) {
-      card.append(el("div", { class: "skeleton" }));
+      card.append(skeletonBody());
     } else if (s.state === "ok") {
       card.append(el("div", { class: "card-value" },
         s.balance == null ? "—" : usd.format(s.balance)));
@@ -389,10 +427,25 @@ async function loadAll() {
   state.summaries.clear();
   state.auth.clear();
   state.series.clear();
+  state.loading = true;
   renderDashboard();
-  await Promise.all(summaryProviders().map(loadProvider));
+  try {
+    await Promise.all(summaryProviders().map(loadProvider));
+  } finally {
+    state.loading = false;
+  }
   state.refreshedAt = Date.now();
   updateRefreshedNote();
+  renderDashboard(); // clear the loading affordances once every card has resolved
+}
+
+// How far along the current load is: how many installed providers have a
+// summary in hand vs. the total we're waiting on.
+function loadProgress() {
+  const total = summaryProviders().length;
+  let done = 0;
+  for (const p of summaryProviders()) if (state.summaries.has(p.id)) done += 1;
+  return { done, total };
 }
 
 // Re-fetch a single provider (per-card refresh), with a spinning button.
@@ -1039,6 +1092,7 @@ function cycleTheme() {
 async function refresh() {
   const btn = $("#refresh");
   btn.classList.add("busy");
+  state.loading = true; // so the first paint already reads as "loading"
   try {
     const { providers, host } = await api("/api/providers");
     state.providers = providers;
@@ -1077,8 +1131,14 @@ document.addEventListener("keydown", (ev) => {
   if (ev.key === "Escape" && !$("#drawer").hidden) closeDrawer();
 });
 
+// Reveal the target section and paint the loading shell *before* the (slow)
+// data fetch — otherwise the whole dashboard stays hidden until every summary
+// resolves, so the user stares at a blank page with no sign of progress.
+state.loading = true;
+route();
+renderDashboard();
 refresh()
-  .then(route)
+  .then(route) // re-run once data is in to resolve a #/p/<id> drawer deep link
   .catch((e) => {
     $("#cards").textContent = `Failed to load: ${e}`;
     route();
