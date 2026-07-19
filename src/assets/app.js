@@ -14,7 +14,10 @@ const state = {
   series: new Map(),      // "id/sid" -> series response (cached per refresh)
   checkedAt: new Map(),   // id -> Date.now() of last summary fetch
   refreshedAt: null,
+  os: null,               // server host OS ("macos" | "linux" | ...)
 };
+
+const isMac = () => state.os === "macos";
 
 const KIND = {
   electric: { icon: "i-bolt", hue: "var(--kind-electric)" },
@@ -143,6 +146,21 @@ function renderStats() {
   const oks = [...state.summaries.entries()].filter(([, s]) => s.state === "ok" && s.balance != null);
   $("#hero-value").textContent = usd.format(oks.reduce((sum, [, s]) => sum + s.balance, 0));
 
+  // The total only sums accounts we could read. If some failed (expired
+  // session etc.), say so — an unqualified total would silently under-report.
+  // Count only providers whose summary actually errored; ones still loading
+  // (no summary entry yet) aren't "couldn't be read", so the caveat doesn't
+  // flash during a refresh.
+  const installed = summaryProviders().length;
+  const failed = [...state.summaries.values()].filter((s) => s.state === "error").length;
+  const note = $("#hero-caveat");
+  if (failed > 0 && installed > 0) {
+    note.textContent = `${failed} of ${installed} account${installed === 1 ? "" : "s"} couldn't be read`;
+    note.hidden = false;
+  } else {
+    note.hidden = true;
+  }
+
   const side = $("#stats-side");
   side.replaceChildren();
 
@@ -236,6 +254,19 @@ function renderCards() {
     const authState = state.auth.get(p.id);
     if (authState === "authenticated") top.append(pill("good", "i-check", "signed in"));
     else if (authState === "unauthenticated") top.append(pill("warn", null, "sign-in needed"));
+
+    // Per-card refresh: re-hit just this provider, so the full Refresh (which
+    // re-queries every portal) isn't the only way to update one — and it's
+    // gentler on the portals the README promises to be polite to.
+    if (p.detection.installed) {
+      const rb = el("button", { class: "icon-btn card-refresh", title: `Refresh ${p.name}` });
+      rb.append(icon("i-refresh"));
+      rb.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        refreshOne(p, rb);
+      });
+      top.append(rb);
+    }
     card.append(top);
 
     if (!p.detection.installed) {
@@ -276,7 +307,10 @@ function renderCards() {
       if (s.hint) {
         const hint = el("div", { class: "card-status warn" });
         hint.append("Run: ", el("code", {}, s.hint));
-        if (p.auth?.["login-command"] === s.hint) hint.append(loginTerminalButton(p, "Open in Terminal"));
+        if (p.auth?.["login-command"] === s.hint) {
+          const tb = loginTerminalButton(p, "Open in Terminal");
+          if (tb) hint.append(tb);
+        }
         card.append(hint);
       }
       if (s.stderr) {
@@ -317,52 +351,59 @@ function renderCards() {
 
 // ---------- data loading ----------
 
-async function loadAll() {
-  const installed = summaryProviders();
-  const authed = state.providers.filter((p) => p.auth?.required && p.detection.installed);
-  state.summaries.clear();
-  state.auth.clear();
-  state.series.clear();
+// Fetch one provider's summary, snapshots, auth, and series into state and
+// re-render. Shared by the full refresh and the per-card refresh.
+async function loadProvider(p) {
+  try {
+    state.summaries.set(p.id, await api(`/api/providers/${p.id}/summary`));
+  } catch (e) {
+    state.summaries.set(p.id, { state: "error", stderr: String(e) });
+  }
+  state.checkedAt.set(p.id, Date.now());
   renderDashboard();
-
-  const jobs = [
-    ...installed.map(async (p) => {
-      try {
-        state.summaries.set(p.id, await api(`/api/providers/${p.id}/summary`));
-      } catch (e) {
-        state.summaries.set(p.id, { state: "error", stderr: String(e) });
-      }
-      state.checkedAt.set(p.id, Date.now());
-      renderDashboard();
-      // Refresh snapshots after the summary recorded one.
-      try {
-        const r = await api(`/api/providers/${p.id}/snapshots`);
-        state.snapshots.set(p.id, r.snapshots);
-        renderDashboard();
-      } catch { /* keep old */ }
-    }),
-    ...authed.map(async (p) => {
+  // Snapshots after the summary (which records one).
+  try {
+    state.snapshots.set(p.id, (await api(`/api/providers/${p.id}/snapshots`)).snapshots);
+  } catch { /* keep old */ }
+  await Promise.all([
+    (async () => {
+      if (!p.auth?.required) return;
       try {
         state.auth.set(p.id, (await api(`/api/providers/${p.id}/auth-status`)).state);
       } catch {
         state.auth.set(p.id, "unknown");
       }
-      renderDashboard();
+    })(),
+    ...(p.series || []).map(async (s) => {
+      try {
+        state.series.set(`${p.id}/${s.id}`, await api(`/api/providers/${p.id}/series/${s.id}`));
+      } catch (e) {
+        state.series.set(`${p.id}/${s.id}`, { ok: false, stderr: String(e) });
+      }
     }),
-    ...installed.flatMap((p) =>
-      (p.series || []).map(async (s) => {
-        try {
-          state.series.set(`${p.id}/${s.id}`, await api(`/api/providers/${p.id}/series/${s.id}`));
-        } catch (e) {
-          state.series.set(`${p.id}/${s.id}`, { ok: false, stderr: String(e) });
-        }
-        renderHighlights();
-      })
-    ),
-  ];
-  await Promise.all(jobs);
+  ]);
+  renderDashboard();
+}
+
+async function loadAll() {
+  state.summaries.clear();
+  state.auth.clear();
+  state.series.clear();
+  renderDashboard();
+  await Promise.all(summaryProviders().map(loadProvider));
   state.refreshedAt = Date.now();
   updateRefreshedNote();
+}
+
+// Re-fetch a single provider (per-card refresh), with a spinning button.
+async function refreshOne(p, btn) {
+  btn.classList.add("busy");
+  try {
+    await loadProvider(p);
+    reopenDrawerIfOpen();
+  } finally {
+    btn.classList.remove("busy");
+  }
 }
 
 function updateRefreshedNote() {
@@ -464,7 +505,10 @@ function renderSetupSection(p) {
     if (cmd) {
       const cmdRow = el("div", { class: "row" });
       cmdRow.append(el("code", {}, cmd));
-      if (p.detection.installed) cmdRow.append(loginTerminalButton(p, "Open in Terminal"));
+      if (p.detection.installed) {
+        const tb = loginTerminalButton(p, "Open in Terminal");
+        if (tb) cmdRow.append(tb);
+      }
       sec.append(cmdRow);
     }
     sec.append(el("div", { class: "entry-meta" },
@@ -572,6 +616,12 @@ function openDrawer(p) {
         download: d.filename,
       });
       a.append(icon("i-download"), d.name);
+      // The CLI can take up to ~2 minutes to produce a PDF; a bare link gives
+      // no feedback. Fetch it with a spinner + toast and trigger the save.
+      a.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        downloadDocument(p, d, a);
+      });
       docs.append(a);
     }
     body.append(docs);
@@ -773,7 +823,8 @@ function renderCatalog() {
       }
     }
     if (p.detection.installed && p.auth?.["login-command"]) {
-      actions.append(loginTerminalButton(p, "Login in Terminal"));
+      const tb = loginTerminalButton(p, "Login in Terminal");
+      if (tb) actions.append(tb);
     }
     const gh = el("a", { class: "btn small", href: p.repo, target: "_blank", rel: "noreferrer" });
     gh.append(icon("i-github"), "GitHub");
@@ -786,7 +837,43 @@ function renderCatalog() {
   }
 }
 
+// The Open-in-Terminal flow uses macOS `osascript`, so it's only offered on
+// macOS. Off-mac, callers show the copyable command instead (null → skip).
+// Fetch a provider document (the CLI can run ~120s) with visible progress,
+// then trigger a browser save. Falls back to nothing destructive on error.
+async function downloadDocument(p, d, anchor) {
+  // Re-entrancy guard: these run the CLI for up to ~120s, so ignore repeat
+  // clicks while one is already in flight (else duplicate fetches + saves).
+  if (anchor.classList.contains("loading")) return;
+  anchor.classList.add("loading");
+  const spin = icon("i-refresh");
+  spin.classList.add("spin");
+  anchor.prepend(spin);
+  toast(`${p.name}: preparing ${d.name}…`);
+  try {
+    const res = await fetch(`/api/providers/${p.id}/doc/${d.id}`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || `${res.status} ${res.statusText}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const tmp = el("a", { href: url, download: d.filename });
+    document.body.append(tmp);
+    tmp.click();
+    tmp.remove();
+    URL.revokeObjectURL(url);
+    toast(`${p.name}: ${d.filename} downloaded`);
+  } catch (e) {
+    toast(String(e.message || e), "err");
+  } finally {
+    spin.remove();
+    anchor.classList.remove("loading");
+  }
+}
+
 function loginTerminalButton(p, label = "Open login in Terminal") {
+  if (!isMac()) return null;
   const btn = el("button", { class: "small" });
   btn.append(icon("i-terminal"), label);
   btn.addEventListener("click", async () => {
@@ -918,8 +1005,23 @@ async function register() {
 
 // ---------- theme ----------
 
+function currentTheme() {
+  return localStorage.getItem("utiman-theme") || "system";
+}
+
+// Reflect the active theme on the toggle: icon (auto/sun/moon), tooltip, aria.
+function updateThemeToggle() {
+  const cur = currentTheme();
+  const glyph = { system: "i-theme", light: "i-sun", dark: "i-moon" }[cur];
+  const btn = $("#theme-toggle");
+  btn.replaceChildren(icon(glyph));
+  const label = `Theme: ${cur} (click to change)`;
+  btn.title = label;
+  btn.setAttribute("aria-label", label);
+}
+
 function cycleTheme() {
-  const cur = localStorage.getItem("utiman-theme") || "system";
+  const cur = currentTheme();
   const next = cur === "system" ? "light" : cur === "light" ? "dark" : "system";
   if (next === "system") {
     localStorage.removeItem("utiman-theme");
@@ -928,6 +1030,7 @@ function cycleTheme() {
     localStorage.setItem("utiman-theme", next);
     document.documentElement.dataset.theme = next;
   }
+  updateThemeToggle();
   toast(`Theme: ${next}`);
 }
 
@@ -937,8 +1040,9 @@ async function refresh() {
   const btn = $("#refresh");
   btn.classList.add("busy");
   try {
-    const { providers } = await api("/api/providers");
+    const { providers, host } = await api("/api/providers");
     state.providers = providers;
+    state.os = host?.os ?? null;
     renderCatalog();
     renderDashboard();
     await loadAll();
@@ -965,6 +1069,7 @@ function reopenDrawerIfOpen() {
 $("#refresh").addEventListener("click", refresh);
 $("#register-btn").addEventListener("click", register);
 $("#theme-toggle").addEventListener("click", cycleTheme);
+updateThemeToggle();
 $("#modal-close").addEventListener("click", () => $("#output-modal").close());
 $("#drawer-close").addEventListener("click", closeDrawer);
 $("#drawer-backdrop").addEventListener("click", closeDrawer);
