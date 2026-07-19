@@ -224,16 +224,22 @@ function plot(spec, container) {
 
 const MONTHS3 = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
-/** Parse a period label into a Date (or null). Numeric ISO/US and `2026-06`
- * go through Date.parse; `Jun 2026` / `June 2026` are handled explicitly. */
+/** Parse a period label into a *local* Date (or null). `Jun 2026` / `June 2026`
+ * and ISO `2026-06`/`2026-06-26` are built from components so they land on local
+ * midnight — `Date.parse("2026-06-26")` would be UTC midnight, which local
+ * getMonth()/getFullYear() can read back a day (and month) early in zones west
+ * of UTC, mis-bucketing a 1st-of-month bill. Other shapes fall back to parse. */
 function labelToDate(label) {
-  if (!label) return null;
-  const m = String(label).match(/([A-Za-z]{3,})\s+(\d{4})/);
-  if (m) {
-    const mi = MONTHS3.indexOf(m[1].slice(0, 3).toLowerCase());
-    if (mi >= 0) return new Date(Number(m[2]), mi, 1);
+  const s = String(label || "");
+  if (!s) return null;
+  const named = s.match(/([A-Za-z]{3,})\s+(\d{4})/);
+  if (named) {
+    const mi = MONTHS3.indexOf(named[1].slice(0, 3).toLowerCase());
+    if (mi >= 0) return new Date(Number(named[2]), mi, 1);
   }
-  const t = Date.parse(label);
+  const iso = s.match(/(\d{4})-(\d{1,2})(?:-(\d{1,2}))?/);
+  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3] || 1));
+  const t = Date.parse(s);
   return Number.isNaN(t) ? null : new Date(t);
 }
 
@@ -350,4 +356,179 @@ function renderSparkline(snapshots) {
   const [lx, ly] = xy[xy.length - 1];
   svg.append(svgEl("circle", { cx: lx, cy: ly, r: 2.5, class: "spark-dot" }));
   return svg;
+}
+
+// ---------- cross-provider spend rollup ----------
+
+// Provider kind → chart hue, reusing the same CSS custom props as the badges so
+// the rollup's stacked segments match each provider's identity color.
+function kindHue(kind) {
+  // Only kinds with a defined --kind-* token; "trash" (and anything unknown)
+  // falls back to --kind-other, matching the badge KIND map in app.js. Using
+  // an undefined var would resolve to the SVG fill initial value (black).
+  const known = ["electric", "water", "sewer", "gas", "internet"];
+  return `var(--kind-${known.includes(kind) ? kind : "other"})`;
+}
+
+/**
+ * Stacked monthly-spend chart across providers.
+ *   months:    [{ label, total, segments: [{ id, name, kind, value }] }] oldest→newest
+ *   providers: ordered [{ id, name, kind }] — fixed color/legend order
+ * Legend is always present (>=2 series); a table view mirrors the data so it's
+ * never color- or hover-only.
+ */
+function renderSpendChart(months, providers) {
+  const box = document.createElement("div");
+  box.className = "chart-box";
+
+  const head = document.createElement("div");
+  head.className = "chart-head";
+  head.append(document.createElement("strong"));
+  const toggle = document.createElement("button");
+  toggle.className = "small";
+  toggle.textContent = "Table";
+  head.append(toggle);
+  box.append(head);
+
+  const legend = document.createElement("div");
+  legend.className = "chart-legend";
+  for (const p of providers) {
+    const item = document.createElement("span");
+    item.className = "legend-item";
+    const sw = document.createElement("span");
+    sw.className = "legend-swatch";
+    sw.style.background = kindHue(p.kind);
+    item.append(sw, p.name);
+    legend.append(item);
+  }
+  box.append(legend);
+
+  const body = document.createElement("div");
+  body.className = "chart-body";
+  body.append(spendPlot(months, providers, body));
+  box.append(body, spendTable(months, providers));
+  box.lastChild.hidden = true;
+
+  toggle.addEventListener("click", () => {
+    const showTable = box.lastChild.hidden;
+    box.lastChild.hidden = !showTable;
+    body.hidden = showTable;
+    legend.hidden = showTable;
+    toggle.textContent = showTable ? "Chart" : "Table";
+  });
+  return box;
+}
+
+function spendPlot(months, providers, container) {
+  const W = 640, H = 240;
+  const M = { top: 14, right: 12, bottom: 26, left: 58 };
+  const iw = W - M.left - M.right, ih = H - M.top - M.bottom;
+  const domain = niceMax(Math.max(1, ...months.map((m) => m.total)));
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, class: "chart", role: "img" });
+  svg.setAttribute("aria-label", "Total monthly spend across providers");
+
+  for (const g of [0, 0.5, 1]) {
+    const y = M.top + ih - g * ih;
+    svg.append(svgEl("line", {
+      x1: M.left, x2: M.left + iw, y1: y, y2: y,
+      class: g === 0 ? "axis-line" : "grid-line",
+    }));
+    const lbl = svgEl("text", { x: M.left - 6, y: y + 4, class: "tick", "text-anchor": "end" });
+    lbl.textContent = fmtVal(domain * g, "usd");
+    svg.append(lbl);
+  }
+
+  const tooltip = document.createElement("div");
+  tooltip.className = "chart-tip";
+  tooltip.hidden = true;
+  container.append(tooltip);
+
+  const n = months.length;
+  const step = iw / n;
+  const barW = Math.max(6, Math.min(34, step - 8));
+
+  months.forEach((mo, i) => {
+    const x = M.left + step * i + (step - barW) / 2;
+    // Draw in the providers' fixed order so a color always means the same
+    // utility; stack from the baseline up.
+    const segs = providers
+      .map((p) => mo.segments.find((s) => s.id === p.id))
+      .filter((s) => s && s.value > 0);
+    let baseline = M.top + ih;
+    segs.forEach((seg, si) => {
+      const h = (seg.value / domain) * ih;
+      const yb = baseline, yt = baseline - h;
+      const isTop = si === segs.length - 1;
+      const r = isTop ? Math.min(4, barW / 2, h) : 0;
+      const d = isTop
+        ? `M${x},${yb} V${yt + r} Q${x},${yt} ${x + r},${yt} H${x + barW - r} Q${x + barW},${yt} ${x + barW},${yt + r} V${yb} Z`
+        : `M${x},${yb} V${yt} H${x + barW} V${yb} Z`;
+      const path = svgEl("path", { d, class: "spend-seg" });
+      path.style.fill = kindHue(seg.kind);
+      svg.append(path);
+      baseline = yt - 2; // 2px surface gap between stacked segments
+    });
+
+    const hit = svgEl("rect", {
+      x: M.left + step * i, y: M.top, width: step, height: ih, fill: "transparent",
+    });
+    hit.addEventListener("mousemove", (e) => {
+      tooltip.hidden = false;
+      const parts = [`${mo.label} — ${fmtVal(mo.total, "usd")}`];
+      for (const s of mo.segments) parts.push(`${s.name}: ${fmtVal(s.value, "usd")}`);
+      tooltip.textContent = parts.join("   ·   ");
+      const rb = container.getBoundingClientRect();
+      tooltip.style.left = `${Math.min(e.clientX - rb.left + 12, rb.width - 200)}px`;
+      tooltip.style.top = `${e.clientY - rb.top - 30}px`;
+    });
+    hit.addEventListener("mouseleave", () => { tooltip.hidden = true; });
+    svg.append(hit);
+  });
+
+  const every = Math.max(1, Math.ceil(n / 6));
+  months.forEach((mo, i) => {
+    if (i % every !== 0 && i !== n - 1) return;
+    const t = svgEl("text", {
+      x: M.left + step * (i + 0.5), y: H - 8, class: "tick", "text-anchor": "middle",
+    });
+    t.textContent = mo.label;
+    svg.append(t);
+  });
+  return svg;
+}
+
+function spendTable(months, providers) {
+  const wrap = document.createElement("div");
+  wrap.className = "chart-table";
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  const hr = document.createElement("tr");
+  for (const h of ["Month", ...providers.map((p) => p.name), "Total"]) {
+    const th = document.createElement("th");
+    th.textContent = h;
+    hr.append(th);
+  }
+  thead.append(hr);
+  const tbody = document.createElement("tbody");
+  for (const mo of [...months].reverse()) {
+    const tr = document.createElement("tr");
+    const td0 = document.createElement("td");
+    td0.textContent = mo.label;
+    tr.append(td0);
+    for (const p of providers) {
+      const seg = mo.segments.find((s) => s.id === p.id);
+      const td = document.createElement("td");
+      td.className = "num";
+      td.textContent = seg ? fmtVal(seg.value, "usd") : "—";
+      tr.append(td);
+    }
+    const tot = document.createElement("td");
+    tot.className = "num";
+    tot.textContent = fmtVal(mo.total, "usd");
+    tr.append(tot);
+    tbody.append(tr);
+  }
+  table.append(thead, tbody);
+  wrap.append(table);
+  return wrap;
 }

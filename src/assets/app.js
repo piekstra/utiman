@@ -139,6 +139,7 @@ function renderDashboard() {
   renderHighlights();
   renderTimeline();
   renderCards();
+  renderRollup();
   const any = summaryProviders().length > 0;
   // While a load is in flight, keep the stats strip up (it carries the loading
   // hero + progress) and never flash the "no providers yet" empty state before
@@ -405,6 +406,83 @@ function anomalyFor(p) {
     if (r?.ok && r.anomaly) return r.anomaly;
   }
   return null;
+}
+
+// "2026-06" -> "Jun 2026" for compact month labels.
+function monthLabel(key) {
+  const M3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const [y, m] = key.split("-");
+  return `${M3[Number(m) - 1]} ${y}`;
+}
+
+// Aggregate each provider's dollar-denominated history by calendar month into
+// stacked per-provider segments — the cross-provider "money out for utilities"
+// view the per-account charts can't give. One series per provider (a billed
+// amount is preferred over a payments series so semantics don't mix within a
+// provider, and two usd series can never double-count); kWh/gallon series are
+// skipped. A provider that only reports payments (e.g. a quarterly sewer bill)
+// still contributes its best-available money signal rather than being dropped.
+function spendRollup() {
+  const provMap = new Map();          // id -> { id, name, kind }
+  const byMonth = new Map();          // "YYYY-MM" -> Map(id -> summed value)
+  // Prefer a billed-cost series over a payments one when a provider has both.
+  const isCost = (s) => /bill|cost|charge|amount/i.test(`${s.id} ${s.name || ""}`);
+  for (const p of summaryProviders()) {
+    // (named usdSeries, not usd, so it can't shadow the module-level currency
+    // formatter and turn a future usd.format(...) into a runtime error.)
+    const usdSeries = (p.series || [])
+      .map((s) => ({ s, r: state.series.get(`${p.id}/${s.id}`) }))
+      .filter((x) => x.r?.ok && x.r.unit === "usd");
+    if (!usdSeries.length) continue;
+    const chosen = usdSeries.find((x) => isCost(x.s)) || usdSeries[0];
+    provMap.set(p.id, { id: p.id, name: p.name, kind: p.kind });
+    for (const pt of chosen.r.points) {
+      const d = labelToDate(pt.label);
+      if (!d) continue;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (!byMonth.has(key)) byMonth.set(key, new Map());
+      const mm = byMonth.get(key);
+      // Count charges only: a credit/refund (negative) is money back, not
+      // spend — clamp to 0 so it never inflates the total the way abs() would.
+      mm.set(p.id, (mm.get(p.id) || 0) + Math.max(0, pt.value));
+    }
+  }
+  const providers = [...provMap.values()];
+  const months = [...byMonth.entries()]
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .slice(-12) // a year is plenty of bars
+    .map(([key, mm]) => {
+      const segments = [...mm.entries()].map(([id, value]) => ({
+        id, value, name: provMap.get(id).name, kind: provMap.get(id).kind,
+      }));
+      return { label: monthLabel(key), total: segments.reduce((a, s) => a + s.value, 0), segments };
+    });
+  return { months, providers };
+}
+
+// Stacked "Total monthly spend" chart. Injected after the timeline/highlights;
+// only shown with 2+ providers and 2+ months, where it adds something the
+// single-account charts don't.
+function renderRollup() {
+  let box = $("#rollup");
+  if (!box) {
+    box = el("div", { class: "rollup", id: "rollup" });
+    ($("#timeline") || $("#highlights") || $("#stats-strip")).after(box);
+  }
+  const { months, providers } = spendRollup();
+  if (months.length < 2 || providers.length < 2) {
+    box.replaceChildren();
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  box.replaceChildren();
+  const latest = months[months.length - 1];
+  box.append(el("div", { class: "rollup-head" },
+    el("strong", {}, "Total monthly spend"),
+    el("span", { class: "rollup-sub" },
+      `${providers.length} utilities · latest ${latest.label}: ${usd.format(latest.total)}`)));
+  box.append(renderSpendChart(months, providers));
 }
 
 function renderCards() {
