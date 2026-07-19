@@ -224,16 +224,22 @@ function plot(spec, container) {
 
 const MONTHS3 = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
-/** Parse a period label into a Date (or null). Numeric ISO/US and `2026-06`
- * go through Date.parse; `Jun 2026` / `June 2026` are handled explicitly. */
+/** Parse a period label into a *local* Date (or null). `Jun 2026` / `June 2026`
+ * and ISO `2026-06`/`2026-06-26` are built from components so they land on local
+ * midnight — `Date.parse("2026-06-26")` would be UTC midnight, which local
+ * getMonth()/getFullYear() can read back a day (and month) early in zones west
+ * of UTC, mis-bucketing a 1st-of-month bill. Other shapes fall back to parse. */
 function labelToDate(label) {
-  if (!label) return null;
-  const m = String(label).match(/([A-Za-z]{3,})\s+(\d{4})/);
-  if (m) {
-    const mi = MONTHS3.indexOf(m[1].slice(0, 3).toLowerCase());
-    if (mi >= 0) return new Date(Number(m[2]), mi, 1);
+  const s = String(label || "");
+  if (!s) return null;
+  const named = s.match(/([A-Za-z]{3,})\s+(\d{4})/);
+  if (named) {
+    const mi = MONTHS3.indexOf(named[1].slice(0, 3).toLowerCase());
+    if (mi >= 0) return new Date(Number(named[2]), mi, 1);
   }
-  const t = Date.parse(label);
+  const iso = s.match(/(\d{4})-(\d{1,2})(?:-(\d{1,2}))?/);
+  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3] || 1));
+  const t = Date.parse(s);
   return Number.isNaN(t) ? null : new Date(t);
 }
 
