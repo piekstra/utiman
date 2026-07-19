@@ -47,6 +47,9 @@ authenticated-field = "authenticated"        # truthy dot-path = signed in
 [summary]                            # fills the dashboard card
 args = ["balance", "--json"]
 format = "json"                      # "json" (default) or "text"
+# Optional for utility/v1-profile CLIs (cli-common >= v0.2.0): a
+# `utility-summary/v1` payload is parsed from its schema tag alone —
+# `balance` (Money object) + `due_date` — and the fields below are ignored.
 balance-fields = ["balance_due"]     # fallbacks, tried in order
 due-date-fields = ["due_date"]
 # scale = "cents"                    # divide the balance by 100
@@ -61,6 +64,9 @@ id = "usage"
 name = "Water usage by period"
 args = ["usage", "list", "--json"]
 format = "json"                      # "json" (default) or "table" (pipe-table text)
+# A `<record>-list/v1` Paged envelope (utility/v1 profile) is unwrapped
+# automatically: records are read from `items`, and Money-object values
+# resolve by their decimal amount (value-fields = ["amount"] just works).
 items-path = ""                      # dot-path to the record array ("" = JSON root)
 label-field = "period"               # each record's x label
 value-fields = ["quantity"]          # fallbacks, tried in order
