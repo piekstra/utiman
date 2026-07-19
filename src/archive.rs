@@ -14,9 +14,21 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 
 use crate::dates::parse_label;
 use crate::extract::Point;
+
+/// Serializes the archive read-modify-write. axum services `/series` fetches
+/// concurrently on tokio's multi-thread runtime, so two overlapping calls for
+/// the same provider+series would otherwise both read the pre-merge file and
+/// the second write would clobber the first, silently dropping a period. One
+/// global lock is ample for this low write volume and keeps merge trivially
+/// correct; the critical section is a couple of small file operations.
+fn write_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
 
 pub fn dir() -> PathBuf {
     dirs::home_dir()
@@ -61,11 +73,25 @@ pub fn read(provider: &str, series: &str) -> Vec<Point> {
 /// the full merged history, newest-first. When nothing new is learned, the
 /// file is left untouched.
 pub fn merge(provider: &str, series: &str, fresh: &[Point]) -> Vec<Point> {
-    // Upsert: label → value, existing first so a fresh value overrides.
-    let mut by_label: Vec<(String, f64)> = read(provider, series)
-        .into_iter()
-        .map(|p| (p.label, p.value))
-        .collect();
+    // Hold the lock across the read and the write so a concurrent merge for the
+    // same series can't slip in between and lose an update.
+    let _guard = write_lock().lock().unwrap_or_else(|e| e.into_inner());
+    let (merged, changed) = merge_points(read(provider, series), fresh);
+    if changed {
+        if let Err(e) = write_series(provider, series, &merged) {
+            eprintln!("utiman: could not persist series {provider}/{series}: {e}");
+        }
+    }
+    merged
+}
+
+/// Pure upsert-by-label: returns the merged history (newest-first) and whether
+/// anything changed. Split from I/O so it's unit-testable and so the file write
+/// can be skipped when a re-fetch taught us nothing new.
+fn merge_points(existing: Vec<Point>, fresh: &[Point]) -> (Vec<Point>, bool) {
+    // label → value, existing first so a fresh value overrides.
+    let mut by_label: Vec<(String, f64)> =
+        existing.into_iter().map(|p| (p.label, p.value)).collect();
     let mut changed = false;
     for f in fresh {
         if let Some(slot) = by_label.iter_mut().find(|(l, _)| *l == f.label) {
@@ -83,16 +109,25 @@ pub fn merge(provider: &str, series: &str, fresh: &[Point]) -> Vec<Point> {
         .map(|(label, value)| Point { label, value })
         .collect();
     sort_newest_first(&mut merged);
+    (merged, changed)
+}
 
-    if changed && fs::create_dir_all(dir()).is_ok() {
-        let body: String = merged
-            .iter()
-            .filter_map(|p| serde_json::to_string(p).ok())
-            .collect::<Vec<_>>()
-            .join("\n");
-        let _ = fs::write(file_for(provider, series), body + "\n");
-    }
-    merged
+/// Serialize the merged history to the archive file via a temp file + rename,
+/// so a crash mid-write can't leave a half-written archive whose bad lines
+/// `read()` would silently drop. Callers hold `write_lock`.
+fn write_series(provider: &str, series: &str, merged: &[Point]) -> std::io::Result<()> {
+    fs::create_dir_all(dir())?;
+    let body: String = merged
+        .iter()
+        .filter_map(|p| serde_json::to_string(p).ok())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let final_path = file_for(provider, series);
+    let mut tmp = final_path.clone().into_os_string();
+    tmp.push(".tmp");
+    let tmp_path = PathBuf::from(tmp);
+    fs::write(&tmp_path, body + "\n")?;
+    fs::rename(&tmp_path, &final_path)
 }
 
 /// Newest-first, matching how provider CLIs emit series. Points whose label
@@ -135,5 +170,35 @@ mod tests {
             labels,
             ["2026-06-01", "2026-05-01", "2026-04-01", "mystery"]
         );
+    }
+
+    #[test]
+    fn merge_updates_existing_label() {
+        let existing = vec![pt("2026-05-01", 100.0), pt("2026-06-01", 110.0)];
+        let (merged, changed) = merge_points(existing, &[pt("2026-06-01", 125.0)]);
+        assert!(changed, "a changed value must flag a write");
+        assert_eq!(merged[0], pt("2026-06-01", 125.0)); // newest-first, updated
+        assert_eq!(merged[1], pt("2026-05-01", 100.0));
+    }
+
+    #[test]
+    fn merge_appends_new_label() {
+        let existing = vec![pt("2026-05-01", 100.0)];
+        let (merged, changed) = merge_points(existing, &[pt("2026-06-01", 110.0)]);
+        assert!(changed);
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged[0], pt("2026-06-01", 110.0));
+    }
+
+    #[test]
+    fn merge_unchanged_is_idempotent() {
+        let existing = vec![pt("2026-05-01", 100.0), pt("2026-06-01", 110.0)];
+        // Re-merging identical values learns nothing → no write.
+        let (merged, changed) = merge_points(existing.clone(), &existing);
+        assert!(!changed, "no new data must not flag a write");
+        // ...and a second pass over the result is stable.
+        let (merged2, changed2) = merge_points(merged.clone(), &merged);
+        assert!(!changed2);
+        assert_eq!(merged, merged2);
     }
 }

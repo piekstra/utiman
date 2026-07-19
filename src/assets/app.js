@@ -184,6 +184,7 @@ function renderHighlights() {
     $("#stats-strip").after(box);
   }
   box.replaceChildren();
+  let count = 0;
   for (const p of summaryProviders()) {
     for (const s of p.series || []) {
       const r = state.series.get(`${p.id}/${s.id}`);
@@ -202,9 +203,13 @@ function renderHighlights() {
         ` ${vs})`
       );
       box.append(line);
+      count += 1;
       break; // one highlight per provider
     }
   }
+  // Collapse the box entirely when there's nothing to show, so it doesn't
+  // reserve blank vertical space before series data has streamed in.
+  box.hidden = count === 0;
 }
 
 function statusLine(cls, iconName, text) {

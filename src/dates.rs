@@ -146,14 +146,18 @@ const MONTHS: [&str; 12] = [
 ];
 
 fn four_digit_year(s: &str) -> Option<i64> {
+    // Scan the raw bytes for a run of four ASCII digits. Testing the bytes (not
+    // slicing the &str) keeps this panic-free on labels with multi-byte UTF-8:
+    // ASCII digits are single-byte, so a window that's all digits never crosses
+    // a char boundary, and any window touching a multi-byte char is skipped.
     let bytes = s.as_bytes();
     for i in 0..bytes.len().saturating_sub(3) {
-        let w = &s[i..i + 4];
-        if w.bytes().all(|b| b.is_ascii_digit()) {
-            if let Ok(y) = w.parse::<i64>() {
-                if (1970..=3000).contains(&y) {
-                    return Some(y);
-                }
+        if bytes[i..i + 4].iter().all(u8::is_ascii_digit) {
+            let y = bytes[i..i + 4]
+                .iter()
+                .fold(0i64, |acc, b| acc * 10 + i64::from(b - b'0'));
+            if (1970..=3000).contains(&y) {
+                return Some(y);
             }
         }
     }
@@ -267,6 +271,21 @@ mod tests {
             })
         );
         assert_eq!(parse_label("period 12"), None);
+    }
+
+    #[test]
+    fn parse_label_non_ascii_does_not_panic() {
+        // Multi-byte chars must not panic four_digit_year's byte scan.
+        assert_eq!(
+            parse_label("Facturación Jun 2026"),
+            Some(Date {
+                year: 2026,
+                month: 6,
+                day: 1
+            })
+        );
+        // A non-ASCII label with no recognizable date is simply unmatched.
+        assert_eq!(parse_label("período eléctrico"), None);
     }
 
     #[test]
