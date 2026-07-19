@@ -287,6 +287,12 @@ function renderCards() {
         due.append("No due date reported");
       }
       card.append(due);
+      // A payment you made hasn't posted to the portal balance yet.
+      if (s.pending) {
+        const pend = el("div", { class: "card-status pending" });
+        pend.append(icon("i-clock"), "Payment pending — not yet reflected in the balance");
+        card.append(pend);
+      }
       const pay = payButton(p);
       if (pay) card.append(el("div", { class: "card-pay" }, pay));
     } else {
@@ -880,6 +886,17 @@ function loginTerminalButton(p, label = "Open login in Terminal") {
  * a link for the `url` form, or a POST that runs the CLI for `open-args`.
  * utiman never sees card data. Returns null when the provider has no pay
  * config or isn't installed. */
+// Record that a payment was just initiated, with the balance at the time, so
+// the card can show a "payment pending" state until the balance drops.
+function markPaymentInitiated(p) {
+  const balance = state.summaries.get(p.id)?.balance ?? null;
+  api(`/api/providers/${p.id}/payment-initiated`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ balance }),
+  }).catch(() => {});
+}
+
 function payButton(p, cls = "small pay-btn") {
   const pay = p.pay;
   if (!pay || !p.detection.installed) return null;
@@ -887,6 +904,7 @@ function payButton(p, cls = "small pay-btn") {
   if (pay.url) {
     const a = el("a", { class: `btn ${cls}`, href: pay.url, target: "_blank", rel: "noreferrer" });
     a.append(icon("i-card"), label);
+    a.addEventListener("click", () => markPaymentInitiated(p));
     return a;
   }
   const btn = el("button", { class: cls });
@@ -896,6 +914,7 @@ function payButton(p, cls = "small pay-btn") {
     btn.disabled = true;
     try {
       const r = await api(`/api/providers/${p.id}/pay`, { method: "POST" });
+      if (r.ok) markPaymentInitiated(p);
       toast(r.ok ? `${p.name}: opened payment page` : (r.stderr || "couldn't open pay page"),
         r.ok ? "ok" : "err");
     } catch (e) {
