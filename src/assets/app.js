@@ -1089,9 +1089,17 @@ function cycleTheme() {
 
 // ---------- boot ----------
 
+let refreshing = false;
 async function refresh() {
+  // Non-re-entrant: a second refresh (double-click, or a click during the boot
+  // load) would run its own loadAll with its own state.loading try/finally, so
+  // whichever finished first would flip loading off and hide the load bar/hero
+  // shimmer while the other's cards still showed "Checking…". One load at a time.
+  if (refreshing) return;
+  refreshing = true;
   const btn = $("#refresh");
   btn.classList.add("busy");
+  btn.disabled = true;
   state.loading = true; // so the first paint already reads as "loading"
   try {
     const { providers, host } = await api("/api/providers");
@@ -1106,6 +1114,8 @@ async function refresh() {
     reopenDrawerIfOpen();
   } finally {
     btn.classList.remove("busy");
+    btn.disabled = false;
+    refreshing = false;
   }
 }
 
