@@ -158,11 +158,12 @@ function renderReport() {
   const root = $("#report");
   root.replaceChildren();
   const provs = summaryProviders();
-  const owed = (p) => {
-    const b = state.summaries.get(p.id);
-    return b?.state === "ok" && b.balance > 0 ? b.balance : 0;
-  };
-  const totalDue = provs.reduce((sum, p) => sum + owed(p), 0);
+  // Match the dashboard hero exactly (raw sum of readable balances, credits
+  // included) so the same "Total due" isn't shown two different ways.
+  const totalDue = provs.reduce((sum, p) => {
+    const s = state.summaries.get(p.id);
+    return s?.state === "ok" && s.balance != null ? sum + s.balance : sum;
+  }, 0);
 
   const dues = provs
     .map((p) => {
@@ -200,7 +201,7 @@ function renderReport() {
       cells.push(
         el("td", { class: "num" }, s.balance == null ? "—" : usd.format(s.balance)),
         el("td", {}, dated ? due : "—"),
-        el("td", {}, s.balance > 0 ? "Due" : "Clear"));
+        el("td", {}, s.balance == null ? "—" : s.balance > 0 ? "Due" : "Clear"));
     } else {
       cells.push(el("td", { class: "num" }, "—"), el("td", {}, "—"),
         el("td", {}, s?.state === "error" ? "Couldn't read" : "—"));

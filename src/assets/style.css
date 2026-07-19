@@ -745,6 +745,14 @@ footer {
 
 /* Print / Save-as-PDF: just the report, on white, no app chrome. */
 @media print {
+  /* Force a light palette so a dark-mode session doesn't print near-white text
+     (printers/PDF export usually drop CSS backgrounds). */
+  :root, :root[data-theme="dark"], :root[data-theme="light"] {
+    --page: #fff; --surface: #fff; --elevated: #fff;
+    --ink: #111; --ink-2: #333; --ink-muted: #666;
+    --grid: #ccc; --hairline: #ddd; --chip: #eee;
+  }
+  body { background: #fff; color: #111; }
   .appbar, .load-bar, #toasts, .report-bar button, footer { display: none !important; }
   main { max-width: none; padding: 0; }
   #view-report { display: block !important; }
