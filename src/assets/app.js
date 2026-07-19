@@ -184,7 +184,7 @@ function renderStats() {
     side.append(stat);
   }
 
-  const authed = [...state.auth.values()].filter((v) => v === "authenticated").length;
+  const authed = summaryProviders().filter((p) => effectiveAuth(p) === "authenticated").length;
   const stat = el("div", { class: "stat" });
   stat.append(
     el("div", { class: "stat-label" }, "Providers"),
@@ -236,6 +236,34 @@ function statusLine(cls, iconName, text) {
   return s;
 }
 
+// Reconcile the standalone auth-status ("is there a session?") with the actual
+// summary fetch ("does the session still work?"). A CLI can report a session
+// exists while the portal has already expired it — which surfaced as a green
+// "signed in" chip sitting right next to a "Couldn't fetch → run auth login"
+// error. When a fetch fails in a way that points back to re-authenticating
+// (its hint is the login command, and it wasn't just a timeout), trust the
+// fetch and treat the session as expired rather than claiming it's signed in.
+function effectiveAuth(p) {
+  const s = state.summaries.get(p.id);
+  const stale =
+    s?.state === "error" && !s.timed_out && s.hint && s.hint === p.auth?.["login-command"];
+  if (stale) return "expired";
+  return state.auth.get(p.id) ?? null;
+}
+
+function authChip(p) {
+  switch (effectiveAuth(p)) {
+    case "authenticated":
+      return pill("good", "i-check", "signed in");
+    case "expired":
+      return pill("warn", "i-clock", "session expired");
+    case "unauthenticated":
+      return pill("warn", null, "sign-in needed");
+    default:
+      return null;
+  }
+}
+
 function renderCards() {
   const cards = $("#cards");
   cards.replaceChildren();
@@ -251,9 +279,8 @@ function renderCards() {
     );
     top.append(badge(p.kind), title);
 
-    const authState = state.auth.get(p.id);
-    if (authState === "authenticated") top.append(pill("good", "i-check", "signed in"));
-    else if (authState === "unauthenticated") top.append(pill("warn", null, "sign-in needed"));
+    const chip = authChip(p);
+    if (chip) top.append(chip);
 
     // Per-card refresh: re-hit just this provider, so the full Refresh (which
     // re-queries every portal) isn't the only way to update one — and it's
@@ -437,13 +464,16 @@ function renderSetupSection(p) {
   if (!inputs.length && !needsAuth) return null;
 
   const sec = drawerSection("Setup & sign-in");
-  const authState = state.auth.get(p.id);
+  const authState = effectiveAuth(p);
   if (needsAuth) {
-    // Only show a definite state — "unknown"/loading (undefined) renders
-    // nothing, so a pending or failed auth-status check isn't mistaken for a
-    // confirmed sign-out (mirrors renderCards).
+    // Only show a definite state — "unknown"/loading (null) renders nothing, so
+    // a pending or failed auth-status check isn't mistaken for a confirmed
+    // sign-out (mirrors renderCards). "expired" comes from the fetch itself
+    // failing back to re-auth, so it's a definite, actionable state.
     if (authState === "authenticated") {
       sec.append(statusLine("good", "i-check", "Signed in"));
+    } else if (authState === "expired") {
+      sec.append(statusLine("warn", "i-clock", "Session expired — sign in again"));
     } else if (authState === "unauthenticated") {
       sec.append(statusLine("warn", "i-x", "Not signed in"));
     }
@@ -492,9 +522,9 @@ function renderSetupSection(p) {
   }
 
   // Interactive login: numbered steps (if any) + the command + Open-in-Terminal.
-  // Show once auth is resolved and not signed in ("unauthenticated" or
-  // "unknown"); skip while still loading (undefined) so it doesn't flash.
-  if (needsAuth && authState !== undefined && authState !== "authenticated") {
+  // Show once auth is resolved and not usable ("unauthenticated", "unknown", or
+  // "expired"); skip while still loading (null) so it doesn't flash.
+  if (needsAuth && authState !== null && authState !== "authenticated") {
     const cmd = p.auth["login-command"];
     const steps = p.auth["login-steps"] || [];
     if (steps.length) {
