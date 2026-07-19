@@ -222,9 +222,39 @@ function plot(spec, container) {
   return svg;
 }
 
+const MONTHS3 = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+/** Parse a period label into a Date (or null). Numeric ISO/US and `2026-06`
+ * go through Date.parse; `Jun 2026` / `June 2026` are handled explicitly. */
+function labelToDate(label) {
+  if (!label) return null;
+  const m = String(label).match(/([A-Za-z]{3,})\s+(\d{4})/);
+  if (m) {
+    const mi = MONTHS3.indexOf(m[1].slice(0, 3).toLowerCase());
+    if (mi >= 0) return new Date(Number(m[2]), mi, 1);
+  }
+  const t = Date.parse(label);
+  return Number.isNaN(t) ? null : new Date(t);
+}
+
+/** Build a comparison {delta, pct, label, seasonal} between latest and a
+ * reference point (prior period, or same period last year when found). */
+function compareTo(latest, ref, seasonal) {
+  if (!ref) return null;
+  const delta = latest.value - ref.value;
+  return {
+    delta,
+    pct: ref.value ? (delta / Math.abs(ref.value)) * 100 : null,
+    label: ref.label,
+    seasonal,
+  };
+}
+
 /**
  * Descriptive stats over series points (newest-first, as the API returns
  * them). Everything here is directly computed from the data — no guesses.
+ * `compare` prefers the same period last year (the right baseline for
+ * seasonal utilities) and falls back to the prior period.
  */
 function seriesStats(points) {
   const latest = points[0];
@@ -232,8 +262,32 @@ function seriesStats(points) {
   const values = points.map((p) => p.value);
   const avg = values.reduce((a, b) => a + b, 0) / values.length;
   const peak = points.reduce((m, p) => (p.value > m.value ? p : m), points[0]);
-  const delta = prev ? latest.value - prev.value : null;
-  const deltaPct = prev && prev.value ? (delta / Math.abs(prev.value)) * 100 : null;
+
+  // Same period last year: the point closest to ~365 days before latest,
+  // accepted only within ~45 days of that mark.
+  let seasonalRef = null;
+  const latestDate = labelToDate(latest.label);
+  if (latestDate) {
+    const target = latestDate.getTime() - 365.25 * 864e5;
+    let best = null;
+    let bestDiff = 46 * 864e5;
+    for (let i = 1; i < points.length; i++) {
+      const d = labelToDate(points[i].label);
+      if (!d) continue;
+      const diff = Math.abs(d.getTime() - target);
+      if (diff < bestDiff) { bestDiff = diff; best = points[i]; }
+    }
+    seasonalRef = best;
+  }
+  // Prefer the seasonal comparison only when it yields a usable percentage —
+  // a zero-valued same-period-last-year reference makes pct null, and falling
+  // back on object truthiness alone would then suppress a valid prior-period
+  // delta. Fall back on pct == null instead.
+  const seasonalCmp = compareTo(latest, seasonalRef, true);
+  const compare = seasonalCmp && seasonalCmp.pct != null
+    ? seasonalCmp
+    : compareTo(latest, prev, false);
+
   let streak = 0;
   let dir = 0;
   for (let i = 0; i + 1 < points.length; i++) {
@@ -243,7 +297,7 @@ function seriesStats(points) {
     if (d !== dir) break;
     streak++;
   }
-  return { latest, prev, delta, deltaPct, avg, peak, streak, dir, count: points.length };
+  return { latest, prev, compare, avg, peak, streak, dir, count: points.length };
 }
 
 /** Stat-chip row for a series: latest (with delta), average, peak, streak. */
@@ -261,10 +315,12 @@ function insightChips(stats, unit) {
   };
 
   let deltaNode = null;
-  if (stats.deltaPct != null) {
+  const c = stats.compare;
+  if (c && c.pct != null) {
     deltaNode = document.createElement("span");
-    deltaNode.className = stats.delta >= 0 ? "delta-up" : "delta-down";
-    deltaNode.textContent = `${stats.delta >= 0 ? "▲" : "▼"} ${Math.abs(stats.deltaPct).toFixed(1)}% vs ${stats.prev.label}`;
+    deltaNode.className = c.delta >= 0 ? "delta-up" : "delta-down";
+    const vs = c.seasonal ? `vs ${c.label} (last year)` : `vs ${c.label}`;
+    deltaNode.textContent = `${c.delta >= 0 ? "▲" : "▼"} ${Math.abs(c.pct).toFixed(1)}% ${vs}`;
   }
   chip(`Latest (${stats.latest.label})`, fmtVal(stats.latest.value, unit), deltaNode);
   chip(`Average of ${stats.count}`, fmtVal(stats.avg, unit));

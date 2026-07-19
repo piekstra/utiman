@@ -202,25 +202,32 @@ function renderHighlights() {
     $("#stats-strip").after(box);
   }
   box.replaceChildren();
+  let count = 0;
   for (const p of summaryProviders()) {
     for (const s of p.series || []) {
       const r = state.series.get(`${p.id}/${s.id}`);
       if (!r?.ok || r.points.length < 2) continue;
       const stats = seriesStats(r.points);
-      if (stats.deltaPct == null) continue;
+      const c = stats.compare;
+      if (!c || c.pct == null) continue;
       const line = el("div", { class: "highlight" });
-      const dir = stats.delta >= 0 ? "▲" : "▼";
-      const cls = stats.delta >= 0 ? "delta-up" : "delta-down";
+      const dir = c.delta >= 0 ? "▲" : "▼";
+      const cls = c.delta >= 0 ? "delta-up" : "delta-down";
+      const vs = c.seasonal ? `vs ${c.label} last year` : `vs ${c.label}`;
       line.append(
         el("strong", {}, p.name),
         `${s.name.toLowerCase()}: ${fmtVal(stats.latest.value, r.unit)} (`,
-        el("span", { class: cls }, `${dir} ${Math.abs(stats.deltaPct).toFixed(1)}%`),
-        ` vs ${stats.prev.label})`
+        el("span", { class: cls }, `${dir} ${Math.abs(c.pct).toFixed(1)}%`),
+        ` ${vs})`
       );
       box.append(line);
+      count += 1;
       break; // one highlight per provider
     }
   }
+  // Collapse the box entirely when there's nothing to show, so it doesn't
+  // reserve blank vertical space before series data has streamed in.
+  box.hidden = count === 0;
 }
 
 function statusLine(cls, iconName, text) {

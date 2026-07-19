@@ -19,9 +19,10 @@ shells out to provider binaries described by TOML manifests.
 | `src/detect.rs` | PATH lookup + `--version` probe |
 | `src/install.rs` | background install/update tasks with streamed logs |
 | `src/snapshots.rs` | local balance history (`~/.local/share/utiman/history/*.jsonl`) |
+| `src/archive.rs` | local series archive (`~/.local/share/utiman/series/*.jsonl`) so charts outlive the CLI window |
 | `src/summary.rs` | shared "run summary → balance + due" helper (server + `check`) |
 | `src/check.rs` | `utiman check`: due-date report, urgency triage, macOS notify |
-| `src/dates.rs` | dependency-free date parsing (ISO/US) + days-from-today math |
+| `src/dates.rs` | dependency-free date parsing (ISO/US dates + cycle labels like `Jun 2026` / `2026-06` via `parse_label`) + days-from-today math |
 | `src/server.rs` | axum routes, Host-header guard, API handlers |
 | `src/assets/` | embedded frontend (index.html / app.js / charts.js / style.css) |
 | `catalog/` | built-in provider manifests (embedded via `include_str!`) |
