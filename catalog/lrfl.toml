@@ -35,7 +35,9 @@ id = "payments"
 name = "Payments"
 args = ["history", "--years", "2", "--json"]
 items-path = "payments"
-label-field = "payment_date"
+# `payment_date` matches lrfl < 0.6.0; `date` matches the utility/v1
+# payment-list envelope (>= 0.6.0).
+label-field = ["payment_date", "date"]
 value-fields = ["amount"]
 unit = "usd"
 chart = "bar"
