@@ -16,15 +16,17 @@ git = "https://github.com/piekstra/xfinity-cli"
 
 [auth]
 required = true
-# Xfinity blocks non-browser logins, so xfin replays a session cookie you
-# capture from a signed-in browser. The command reads the cookie from your
-# clipboard (copy it in step 3 first); the pipe runs in your terminal.
-login-command = "pbpaste | xfin auth login --stdin"
+# Xfinity blocks non-browser logins, so xfin replays an `Authorization: Bearer`
+# token you capture from a signed-in browser. The command reads it from your
+# clipboard (copy it in step 3 first) and `--overwrite` replaces an expired
+# token in place; the pipe runs in your terminal. These tokens expire, so
+# expect to re-run this every so often.
+login-command = "pbpaste | xfin auth login --stdin --overwrite"
 login-steps = [
-  "Sign in at https://www.xfinity.com in your browser.",
-  "Open DevTools → Network and click a request to customer.xfinity.com/apis/…",
-  "Copy that request's `Cookie` header (right-click → Copy value, or copy the header text).",
-  "With the cookie on your clipboard, run the command below in your terminal.",
+  "Sign in at https://www.xfinity.com/account in your browser.",
+  "Open DevTools → Network and click any request to digital/service/api/…",
+  "Copy that request's `Authorization: Bearer …` header (right-click → Copy value).",
+  "With the token on your clipboard, run the command below in your terminal.",
 ]
 
 # `xfin billing summary` prints a normalized `Balance:` / `Due:` text block
