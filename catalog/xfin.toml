@@ -6,7 +6,7 @@ name = "Xfinity Internet"
 kind = "internet"
 binary = "xfin"
 repo = "https://github.com/piekstra/xfinity-cli"
-description = "Xfinity: balance/due, statement history, data usage, and service outages."
+description = "Xfinity: balance/due, autopay, plan/speed, data usage, statement history, and service outages."
 
 # xfin conforms to piekstra-cli/1, so self-update and auth-status use the
 # family defaults (`self-update`, `auth status --json` → `authenticated`).
@@ -38,15 +38,45 @@ format = "text"
 balance-fields = ["Balance"]
 due-date-fields = ["Due"]
 
+# `xfin internet usage --history` prints a pipe-delimited table of ~12 billing
+# cycles (CYCLE START | CYCLE END | USED | ALLOWABLE | UNIT), so chart the used
+# GB per cycle. utiman assumes newest-first; xfin prints oldest-first, so the
+# archive (keyed by cycle label) is correct even though the immediate chart
+# order is reversed.
+[[series]]
+id = "data-usage"
+name = "Data usage by cycle"
+args = ["internet", "usage", "--history"]
+format = "table"
+label-field = "CYCLE START"
+value-fields = ["USED"]
+unit = "gb"
+chart = "bar"
+
+[[operations]]
+id = "plan"
+name = "Plan & speed"
+args = ["internet", "plan"]
+
+[[operations]]
+id = "usage"
+name = "Data usage (current cycle)"
+args = ["internet", "usage"]
+
 [[operations]]
 id = "statements"
 name = "Statement history"
 args = ["billing", "statements"]
 
 [[operations]]
-id = "usage"
-name = "Internet data usage"
-args = ["internet", "usage"]
+id = "autopay"
+name = "Autopay status"
+args = ["payments", "autopay"]
+
+[[operations]]
+id = "account"
+name = "Account profile"
+args = ["account", "get"]
 
 [[operations]]
 id = "outages"
