@@ -178,7 +178,10 @@ pub fn extract_series(series: &crate::manifest::Series, stdout: &str) -> Vec<Poi
         .iter()
         .filter_map(|rec| {
             let obj = Value::Object(rec.clone());
-            let label = record_field(&obj, &series.label_field)?;
+            let label = series
+                .label_field
+                .iter()
+                .find_map(|f| record_field(&obj, f))?;
             let value = series
                 .value_fields
                 .iter()
@@ -318,7 +321,7 @@ mod tests {
             args: vec![],
             format: format.into(),
             items_path: items_path.into(),
-            label_field: label.into(),
+            label_field: vec![label.into()],
             value_fields: values.iter().map(|s| s.to_string()).collect(),
             unit: None,
             scale: scale.map(String::from),
@@ -477,6 +480,25 @@ mod tests {
         let old = r#"[{"date":"06/15/2026","amount":{"cents":8421}}]"#;
         let pts = extract_series(&s, old);
         assert_eq!(pts[0].value, 84.21);
+    }
+
+    #[test]
+    fn label_field_chain_spans_cli_versions() {
+        // One manifest charts lrfl < 0.6.0 (`payment_date`) and the
+        // utility/v1 payment-list envelope (`date`) via a label fallback.
+        let mut s = series("json", "payments", "payment_date", &["amount"], None);
+        s.label_field = vec!["payment_date".into(), "date".into()];
+
+        let old =
+            r#"{"payments":[{"transaction_id":"T1","amount":61.75,"payment_date":"05/28/2026"}]}"#;
+        let pts = extract_series(&s, old);
+        assert_eq!(pts[0].label, "05/28/2026");
+
+        let new = r#"{"schema":"payment-list/v1","items":[
+            {"date":"2026-05-28","amount":{"amount":"61.75","currency":"USD"}}]}"#;
+        let pts = extract_series(&s, new);
+        assert_eq!(pts[0].label, "2026-05-28");
+        assert_eq!(pts[0].value, 61.75);
     }
 
     #[test]
