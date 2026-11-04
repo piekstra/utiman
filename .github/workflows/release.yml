@@ -2,8 +2,9 @@ name: release
 
 # Cut a release by pushing a tag like `v0.1.0`. One macOS job (Apple Silicon,
 # which cross-compiles the Intel target — the macOS SDK is universal) and one
-# Linux job, independent (fail-fast: false) so a slow queue on one can never
-# block the other's assets. Asset names are `utiman-<target-triple>.tar.gz`,
+# Linux job, independent (fail-fast: false) so one failing never stops the other.
+# A stalled queue delays the release for every platform until that job ends.
+# Asset names are `utiman-<target-triple>.tar.gz`,
 # the contract `utiman self-update` (pk-cli-selfupdate) matches on.
 #
 # `publish` attaches whatever was built to a draft, even when one build failed, and
